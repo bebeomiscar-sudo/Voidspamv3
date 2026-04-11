@@ -1,27 +1,26 @@
 --[[
-    RIVALS VOID PREMIUM v1.3 — nfpw UI Edition
-    The definitive premium voidspam tool
-    AC Bypass · 33 Void Methods · Smart Bypass Engine v3
-    Adaptive Desync · Projectile Detection · Kill Notifier
-    Ragebot Integration · Wall Bang Teleport on Shot
+    LOGIC ENHANCEMENT v4.0 — LinoriaLib Edition
+    Void · Desync · Evasion · Bypass Engine v4
+    AC Bypass · 33 Methods · Kill Notifier
     Mobile + PC compatible
 ]]
 
 -- ═══════════════════════════════════════════
--- ANTI-CHEAT BYPASS
--- Hooks setmetatable to break MiscellaneousController
--- weak table tracking before any game code runs
+-- AC BYPASS (from Rivals Tool v9.8)
 -- ═══════════════════════════════════════════
-local oldtable
-oldtable = hookfunction(getrenv().setmetatable, newcclosure(function(Table, Metatable)
-    if Metatable and typeof(Metatable) == "table" and rawget(Metatable, "__mode") == "kv" then
-        local trace = debug.traceback()
-        if trace:find("MiscellaneousController") then
-            return oldtable({1, 2, 3}, {})
-        end
+assert(hookmetamethod, "Your executor doesn't support hookmetamethod.")
+
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+for i, v in getgc() do
+    if typeof(v) == "function" and string.find(debug.info(v, "s"), "AnalyticsPipelineController") then
+        hookfunction(v, function()
+            return task.wait(9e9)
+        end)
     end
-    return oldtable(Table, Metatable)
-end))
+end
 
 -- ═══════════════════════════════════════════
 -- SERVICES
@@ -33,6 +32,7 @@ local Lighting          = game:GetService("Lighting")
 local Debris            = game:GetService("Debris")
 local TweenService      = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService       = game:GetService("HttpService")
 
 local LP       = Players.LocalPlayer
 local IsMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
@@ -46,26 +46,43 @@ local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 local humanoid         = character:WaitForChild("Humanoid")
 
 -- ═══════════════════════════════════════════
--- RAGEBOT MODULES
+-- LINORIA LIBRARY
 -- ═══════════════════════════════════════════
-local rs_sa      = cloneref(game:GetService("ReplicatedStorage"))
-local players_sa = cloneref(game:GetService("Players"))
-local ws_sa      = cloneref(game:GetService("Workspace"))
+local repo         = "https://raw.githubusercontent.com/mstudio45/LinoriaLib/main/"
+local Library      = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+local SaveManager  = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
-local util_mod, enums_mod, fighter_mod
-pcall(function()
-    util_mod    = require(rs_sa.Modules.Utility)
-    enums_mod   = require(rs_sa.Modules.EnumLibrary)
-    fighter_mod = require(LP.PlayerScripts.Controllers.FighterController)
-end)
+Library.ShowToggleFrameInKeybinds = true
 
-local ragebotModsOk = util_mod and enums_mod and fighter_mod
+local Window = Library:CreateWindow({
+    Title                = "Logic Enhancement v4.0",
+    Center               = true,
+    AutoShow             = true,
+    Resizable            = true,
+    ShowCustomCursor     = false,
+    UnlockMouseWhileOpen = true,
+    NotifySide           = "Left",
+    TabPadding           = 8,
+    MenuFadeTime         = 0.2,
+    Size                 = UDim2.fromOffset(520, 580),
+})
+
+local Tabs = {
+    Void     = Window:AddTab("Void"),
+    Bypass   = Window:AddTab("Bypass"),
+    Desync   = Window:AddTab("Desync"),
+    Evasion  = Window:AddTab("Evasion"),
+    Visuals  = Window:AddTab("Visuals"),
+    Notifier = Window:AddTab("Notifier"),
+    Stats    = Window:AddTab("Stats"),
+    Settings = Window:AddTab("Settings"),
+}
 
 -- ═══════════════════════════════════════════
 -- CONFIG
 -- ═══════════════════════════════════════════
 local CFG = {
-    -- Core void
     Void = {
         On           = false,
         Method       = "Quantum Tunneling",
@@ -77,7 +94,6 @@ local CFG = {
         Scramble     = true,
     },
 
-    -- Bypass engine v3
     Bypass = {
         Mode                = "Adaptive",
         AdaptiveSensitivity = 0.7,
@@ -94,7 +110,6 @@ local CFG = {
         JitterScale         = 50,
     },
 
-    -- Evasion
     Evade = {
         On         = true,
         Radius     = 8e9,
@@ -108,7 +123,6 @@ local CFG = {
         ProjSpeed  = 80,
     },
 
-    -- Desync
     Desync = {
         On            = true,
         Tick          = 0.18,
@@ -120,87 +134,93 @@ local CFG = {
         BaitOffset    = 15,
     },
 
-    -- Ragebot
-    Ragebot = {
-        On              = false,
-        TeamCheck       = false,
-        VisibleCheck    = false,
-        MaxDistance     = 999,
-        AutoReload      = true,
-        -- Wall bang teleport: teleport into target when shooting
-        WallBang        = false,
-        WallBangRestore = true,
-        WallBangOffset  = 0.5,  -- studs inside target
+    -- Visuals
+    Crosshair = {
+        On    = false,
+        Size  = 24,
+        Image = "rbxassetid://97119437608195",
+    },
+    HitNumbers = {
+        On       = true,
+        Color    = Color3.fromRGB(255, 20, 147),
+        Duration = 5,
+    },
+    ESP = {
+        On        = false,
+        ShowBox   = true,
+        ShowName  = true,
+        ShowHP    = true,
+        ShowDist  = false,
+        TeamCheck = true,
+        MaxDist   = 500,
     },
 
-    -- Anti-rager method params
+    -- Ghost mode: makes your character locally invisible
+    GhostMode = {
+        On          = false,
+        Transparency = 0.95,
+    },
+
+    -- Chaos mode: rapidly randomize void method automatically
+    ChaosMode = {
+        On       = false,
+        Interval = 0.8,
+    },
+
+    -- Position logger: logs your void coordinates to console
+    PosLogger = {
+        On       = false,
+        Interval = 2,
+    },
+
+    -- Anti spectator: detects if someone is spectating you
+    AntiSpec = {
+        On = false,
+    },
+
+    KillNotifier = true,
+    KillSound    = true,
+
     SeizureSpeed    = 50,
     HyperdriveSpeed = 20,
     GlitchLayers    = 5,
     RiftPhase       = 3,
-
-    -- New method params
-    WormholeCount  = 6,
-    PhantomLayers  = 4,
-    StormRadius    = 5e11,
-    CollapseSpeed  = 8,
-    EchoDelay      = 0.05,
-    MirrorAxes     = true,
-    PulseWaveFreq  = 7,
-    NovaExplosions = 3,
-
-    -- Misc
+    WormholeCount   = 6,
+    PhantomLayers   = 4,
+    StormRadius     = 5e11,
+    CollapseSpeed   = 8,
+    EchoDelay       = 0.05,
+    MirrorAxes      = true,
+    PulseWaveFreq   = 7,
+    NovaExplosions  = 3,
     LissajousA      = 2,
     LissajousB      = 3,
     GravityStr      = 1e8,
     FlickerInterval = 0.05,
 
-    -- Kill notifier
-    KillNotifier = true,
-    KillSound    = true,
-
-    -- Stats
     Stats = {
         CycleCount        = 0,
         BypassSwitches    = 0,
         ProjectilesEvaded = 0,
         KillCount         = 0,
-        RagebotShots      = 0,
-        WallBangTeleports = 0,
     },
 }
 
 -- ═══════════════════════════════════════════
--- RAGEBOT STATE
+-- HELPERS
 -- ═══════════════════════════════════════════
-local RagebotState = {
-    conn           = nil,        -- active Heartbeat connection
-    reloadCooldown = 0,
-    active         = false,
-    currentTarget  = nil,        -- current locked target character
-    wbOrigPos      = nil,        -- position before wall bang teleport
-    wbActive       = false,      -- currently inside enemy
-    wbConn         = nil,        -- wall bang position lock connection
-}
+local function clamp(x, a, b) return x < a and a or x > b and b or x end
+local function getHRP()  local c = LP.Character; return c and c:FindFirstChild("HumanoidRootPart") end
+local function getHum()  local c = LP.Character; return c and c:FindFirstChildOfClass("Humanoid") end
+local function randSign() return math.random() > 0.5 and 1 or -1 end
+local function lerp(a, b, t) return a + (b - a) * t end
 
-local ray_params_rb = RaycastParams.new()
-local rb_offsets = {
-    Vector3.new(0,12,0), Vector3.new(0,16,0), Vector3.new(0,20,0),
-    Vector3.new(0,24,0), Vector3.new(0,28,0), Vector3.new(0,32,0),
-    Vector3.new(0,36,0), Vector3.new(0,40,0),
-}
-
--- ═══════════════════════════════════════════
--- RAGEBOT HELPERS
--- ═══════════════════════════════════════════
 local function isSameTeam(p)
     local same = false
     pcall(function()
         local myID    = LP:GetAttribute("TeamID")
         local theirID = p:GetAttribute("TeamID")
-        if myID and theirID then
-            same = string.byte(myID or "\0") == string.byte(theirID or "\0")
-        end
+        if myID and theirID then same = (myID == theirID) end
     end)
     if not same then
         pcall(function()
@@ -209,373 +229,6 @@ local function isSameTeam(p)
     end
     return same
 end
-
-local function rbGetHRP(player)
-    local char = player and player.Character
-    if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart")
-end
-
--- Find the closest alive enemy for ragebot targeting
-local function rbGetClosest()
-    if not LP.Character then return nil, nil end
-    local myHRP = LP.Character:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return nil, nil end
-
-    local best, bestChar, bestDist = nil, nil, CFG.Ragebot.MaxDistance
-
-    for _, p in next, players_sa:GetPlayers() do
-        if p == LP then continue end
-        if CFG.Ragebot.TeamCheck and isSameTeam(p) then continue end
-        if not p.Character then continue end
-
-        local head = p.Character:FindFirstChild("Head")
-        if not head then continue end
-
-        local hum = p.Character:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health <= 0 then continue end
-
-        local mag = (myHRP.Position - head.Position).Magnitude
-        if mag < bestDist then
-            bestDist  = mag
-            best      = head
-            bestChar  = p.Character
-        end
-    end
-
-    return best, bestChar
-end
-
--- Calculate shoot position, accounting for walls
-local function rbCalcPoint(origin, targetPos, targetChar)
-    ray_params_rb.FilterDescendantsInstances = {LP.Character, targetChar}
-    ray_params_rb.FilterType = Enum.RaycastFilterType.Exclude
-
-    if not CFG.Ragebot.VisibleCheck then return origin, nil end
-
-    if not ws_sa:Raycast(origin, targetPos - origin, ray_params_rb) then
-        return origin, nil
-    end
-
-    for _, offset in next, rb_offsets do
-        local scanPos = origin + offset
-        if not ws_sa:Raycast(scanPos, targetPos - scanPos, ray_params_rb) then
-            return scanPos, offset.Y
-        end
-    end
-
-    return nil, nil
-end
-
--- ═══════════════════════════════════════════
--- WALL BANG TELEPORT SYSTEM
--- Teleports your HRP inside the target when ragebot fires
--- Restores position after the shot frame
--- ═══════════════════════════════════════════
-
--- Stop any existing wall bang teleport and restore position
-local function stopWallBang()
-    if RagebotState.wbConn then
-        RagebotState.wbConn:Disconnect()
-        RagebotState.wbConn = nil
-    end
-    RagebotState.wbActive = false
-
-    if CFG.Ragebot.WallBangRestore and RagebotState.wbOrigPos then
-        local char = LP.Character
-        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-        pcall(function()
-            if hrp then
-                hrp.CFrame                   = CFrame.new(RagebotState.wbOrigPos)
-                hrp.AssemblyLinearVelocity   = Vector3.zero
-                hrp.AssemblyAngularVelocity  = Vector3.zero
-            end
-        end)
-    end
-
-    RagebotState.wbOrigPos = nil
-end
-
--- Teleport into target for one shot frame then restore
--- Called right before each UseItem fire remote
-local function wallBangTeleport(targetHRP)
-    if not CFG.Ragebot.WallBang then return end
-    if not targetHRP then return end
-
-    local char = LP.Character
-    local myHRP = char and char:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return end
-
-    -- Save current position for restoration
-    if not RagebotState.wbActive then
-        RagebotState.wbOrigPos = myHRP.Position
-    end
-
-    RagebotState.wbActive = true
-
-    -- Teleport into target with slight forward offset
-    local targetCF = targetHRP.CFrame * CFrame.new(0, 0, CFG.Ragebot.WallBangOffset)
-    pcall(function()
-        myHRP.CFrame                   = targetCF
-        myHRP.AssemblyLinearVelocity   = Vector3.zero
-        myHRP.AssemblyAngularVelocity  = Vector3.zero
-    end)
-
-    CFG.Stats.WallBangTeleports = CFG.Stats.WallBangTeleports + 1
-
-    -- Restore next frame so we dont visually stay inside them
-    -- Only if void is not active — if void is on, void will reposition us
-    if not CFG.Void.On then
-        task.defer(function()
-            if not CFG.Ragebot.WallBang then return end
-            local c   = LP.Character
-            local hrp = c and c:FindFirstChild("HumanoidRootPart")
-            if hrp and RagebotState.wbOrigPos then
-                pcall(function()
-                    hrp.CFrame                   = CFrame.new(RagebotState.wbOrigPos)
-                    hrp.AssemblyLinearVelocity   = Vector3.zero
-                    hrp.AssemblyAngularVelocity  = Vector3.zero
-                end)
-            end
-            RagebotState.wbActive  = false
-            RagebotState.wbOrigPos = nil
-        end)
-    end
-end
-
--- ═══════════════════════════════════════════
--- RAGEBOT AUTO RELOAD
--- ═══════════════════════════════════════════
-local function tryRagebotReload(item)
-    if not item then return end
-    if not CFG.Ragebot.AutoReload then return end
-    local ok = false
-    pcall(function()
-        rs_sa.Remotes.Replication.Fighter.UseItem:FireServer(
-            item:Get("ObjectID"), enums_mod:ToEnum("Reload"), {}, nil
-        )
-        ok = true
-    end)
-    if not ok then
-        pcall(function()
-            rs_sa.Remotes.Replication.Fighter.UseItem:FireServer(
-                item:Get("ObjectID"), enums_mod:ToEnum("StartReloading"), {}, nil
-            )
-        end)
-    end
-end
-
--- ═══════════════════════════════════════════
--- RAGEBOT CORE FIRE
--- Builds cameradata and fires UseItem remote
--- Teleports into target right before firing if WallBang is on
--- ═══════════════════════════════════════════
-local function ragebotFire(item, targetPart, targetChar)
-    if not item or not targetPart or not targetChar then return end
-
-    local cam      = ws_sa.CurrentCamera.CFrame
-    local manip, h = rbCalcPoint(cam.Position, targetPart.Position, targetChar)
-    if not manip then return end
-
-    local shootPos = h and cam.Position or manip
-
-    -- Wall bang: teleport into target before the shot
-    if CFG.Ragebot.WallBang then
-        local eHRP = targetChar:FindFirstChild("HumanoidRootPart")
-        wallBangTeleport(eHRP)
-    end
-
-    local cameradata = {}
-    cameradata[utf8.char(1)] = {
-        [utf8.char(0)] = util_mod:EncodeCFrame(
-            CFrame.new(shootPos.X, shootPos.Y + (h or 0), shootPos.Z)
-            * CFrame.Angles(CFrame.lookAt(shootPos, targetPart.Position):ToOrientation())
-        ),
-        [utf8.char(1)] = h and
-            util_mod:EncodeCFrame(
-                CFrame.new(targetPart.Position)
-                * CFrame.Angles(CFrame.lookAt(shootPos, targetPart.Position):ToOrientation())
-            )
-            or util_mod:EncodeCFrame(
-                CFrame.new(shootPos.X, shootPos.Y + (h or 0), shootPos.Z)
-                * CFrame.Angles(CFrame.lookAt(shootPos, targetPart.Position):ToOrientation())
-            ),
-        [utf8.char(2)] = targetPart,
-        [utf8.char(3)] = util_mod:EncodeCFrame(
-            targetPart.CFrame:ToObjectSpace(CFrame.new(targetPart.Position))
-        ),
-    }
-
-    pcall(function()
-        rs_sa.Remotes.Replication.Fighter.UseItem:FireServer(
-            item:Get("ObjectID"), enums_mod:ToEnum("StartShooting"), cameradata, nil
-        )
-    end)
-
-    CFG.Stats.RagebotShots = CFG.Stats.RagebotShots + 1
-end
-
--- ═══════════════════════════════════════════
--- RAGEBOT START / STOP
--- ═══════════════════════════════════════════
-local function startRagebot()
-    if RagebotState.conn then RagebotState.conn:Disconnect() end
-    RagebotState.active        = true
-    RagebotState.reloadCooldown = 0
-
-    RagebotState.conn = RunService.Heartbeat:Connect(function(dt)
-        if not CFG.Ragebot.On then
-            RagebotState.conn:Disconnect()
-            RagebotState.conn   = nil
-            RagebotState.active = false
-            stopWallBang()
-            return
-        end
-
-        if not LP.Character then return end
-        if not LP.Character:FindFirstChild("HumanoidRootPart") then return end
-        if not fighter_mod or not fighter_mod.LocalFighter then return end
-
-        local item = fighter_mod.LocalFighter.EquippedItem
-        if not item then return end
-
-        -- Auto reload check
-        if CFG.Ragebot.AutoReload then
-            RagebotState.reloadCooldown = RagebotState.reloadCooldown - dt
-            local currentAmmo = nil
-            pcall(function() currentAmmo = item:Get("CurrentAmmo") end)
-            if currentAmmo ~= nil and currentAmmo <= 0 and RagebotState.reloadCooldown <= 0 then
-                tryRagebotReload(item)
-                RagebotState.reloadCooldown = 2.0
-                return
-            end
-        end
-
-        -- Find target and fire
-        local targetPart, targetChar = rbGetClosest()
-        if not targetPart or not targetChar then
-            RagebotState.currentTarget = nil
-            return
-        end
-
-        RagebotState.currentTarget = targetChar
-        ragebotFire(item, targetPart, targetChar)
-    end)
-end
-
-local function stopRagebot()
-    CFG.Ragebot.On = false
-    if RagebotState.conn then
-        RagebotState.conn:Disconnect()
-        RagebotState.conn = nil
-    end
-    RagebotState.active        = false
-    RagebotState.currentTarget = nil
-    stopWallBang()
-end
-
--- ═══════════════════════════════════════════
--- MOBILE SCREEN SIZE PROMPT
--- ═══════════════════════════════════════════
-local stored_fonts = {}
-for _, v in Enum.Font:GetEnumItems() do
-    table.insert(stored_fonts, v.Name)
-end
-
-local screenSize = nil
-if IsMobile then
-    local promptDone = false
-    local sizeGui = Instance.new("ScreenGui")
-    sizeGui.Name          = "SizePrompt"
-    sizeGui.ResetOnSpawn  = false
-    sizeGui.IgnoreGuiInset= true
-    sizeGui.Parent        = LP:WaitForChild("PlayerGui")
-
-    local frame = Instance.new("Frame", sizeGui)
-    frame.Size             = UDim2.new(0, 280, 0, 160)
-    frame.Position         = UDim2.new(0.5, -140, 0.5, -80)
-    frame.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
-    frame.BorderSizePixel  = 0
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
-
-    local title = Instance.new("TextLabel", frame)
-    title.Size               = UDim2.new(1, 0, 0, 40)
-    title.BackgroundTransparency = 1
-    title.Text               = "What device are you on?"
-    title.TextColor3         = Color3.fromRGB(220, 220, 230)
-    title.Font               = Enum.Font.GothamBold
-    title.TextSize           = 14
-
-    local function makeBtn(parent, x, text, col)
-        local b = Instance.new("TextButton", parent)
-        b.Size             = UDim2.new(0, 110, 0, 40)
-        b.Position         = UDim2.new(0, x, 0, 55)
-        b.BackgroundColor3 = col
-        b.BorderSizePixel  = 0
-        b.Text             = text
-        b.TextColor3       = Color3.new(1, 1, 1)
-        b.Font             = Enum.Font.GothamBold
-        b.TextSize         = 13
-        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
-        return b
-    end
-
-    local phoneBtn  = makeBtn(frame, 15,  "📱 Phone",  Color3.fromRGB(120, 80, 255))
-    local tabletBtn = makeBtn(frame, 145, "📲 Tablet", Color3.fromRGB(60, 130, 255))
-
-    local note = Instance.new("TextLabel", frame)
-    note.Size                = UDim2.new(1, 0, 0, 30)
-    note.Position            = UDim2.new(0, 0, 0, 110)
-    note.BackgroundTransparency = 1
-    note.Text                = "Adjusts UI size for your screen"
-    note.TextColor3          = Color3.fromRGB(110, 110, 130)
-    note.Font                = Enum.Font.Gotham
-    note.TextSize            = 10
-
-    phoneBtn.MouseButton1Click:Connect(function()
-        screenSize = "phone"; promptDone = true
-    end)
-    tabletBtn.MouseButton1Click:Connect(function()
-        screenSize = "tablet"; promptDone = true
-    end)
-
-    while not promptDone do task.wait(0.05) end
-    sizeGui:Destroy()
-end
-
--- ═══════════════════════════════════════════
--- LIBRARY LOAD
--- ═══════════════════════════════════════════
-local gui_config = {
-    Color         = Color3.fromRGB(120, 80, 255),
-    Keybind       = Enum.KeyCode.Insert,
-    MinHeight     = 100,
-    MaxHeight     = screenSize == "phone" and 480 or 700,
-    InitialHeight = screenSize == "phone" and 360 or 520,
-    MinWidth      = screenSize == "phone" and 260 or 300,
-    MaxWidth      = screenSize == "phone" and 420 or 800,
-    InitialWidth  = screenSize == "phone" and 300 or 560,
-}
-
-local library = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/nfpw/XXSCRIPT/refs/heads/main/Library/Module.lua"
-))()
-local window = library:CreateWindow(gui_config, gethui())
-library:SetWindowName("Rivals Void Premium v1.3")
-
--- ═══════════════════════════════════════════
--- TABS
--- ═══════════════════════════════════════════
-local tabs = {
-    void     = window:CreateTab("Void"),
-    ragebot  = window:CreateTab("Ragebot"),
-    bypass   = window:CreateTab("Bypass"),
-    desync   = window:CreateTab("Desync"),
-    evasion  = window:CreateTab("Evasion"),
-    notifier = window:CreateTab("Notifier"),
-    stats    = window:CreateTab("Stats"),
-    settings = window:CreateTab("Settings"),
-}
 
 -- ═══════════════════════════════════════════
 -- VOID STATE
@@ -592,9 +245,10 @@ local VoidState = {
     EvadeCooldown = 0,
     DesyncTimer   = 0,
 
-    SpoofAngle  = math.random() * math.pi * 2,
-    SpoofDir    = (math.random() > 0.5) and 1 or -1,
-    SpoofBaseX  = 0, SpoofBaseZ = 0,
+    SpoofAngle    = math.random() * math.pi * 2,
+    SpoofDir      = (math.random() > 0.5) and 1 or -1,
+    SpoofBaseX    = 0,
+    SpoofBaseZ    = 0,
     FakeGroundPos = Vector3.zero,
     GroundY       = 0,
     GroundUpdateT = 0,
@@ -621,17 +275,18 @@ local VoidState = {
     InFlicker = false,
     Active    = false,
     Conn      = nil,
+
+    -- Chaos mode
+    ChaosTimer  = 0,
+    -- Pos logger
+    LogTimer    = 0,
+    -- Anti spec
+    SpecWatched = {},
 }
 
 -- ═══════════════════════════════════════════
--- HELPERS
+-- SEIZURE POOL
 -- ═══════════════════════════════════════════
-local function clamp(x, a, b) return x < a and a or x > b and b or x end
-local function getHRP()  local c = LP.Character; return c and c:FindFirstChild("HumanoidRootPart") end
-local function getHum()  local c = LP.Character; return c and c:FindFirstChildOfClass("Humanoid") end
-local function randSign() return math.random() > 0.5 and 1 or -1 end
-local function lerp(a, b, t) return a + (b - a) * t end
-
 local function refreshSeizurePool()
     VoidState.SeizurePool = {}
     for _ = 1, 64 do
@@ -679,8 +334,18 @@ local function computeDriftDir(t)
 end
 
 -- ═══════════════════════════════════════════
--- VOID POSITION COMPUTATION — all 33 methods
+-- ALL 33 VOID METHODS
 -- ═══════════════════════════════════════════
+local allMethods = {
+    "Stable","Drift","Chaotic","Circle","Spiral","Lissajous","Perlin Noise",
+    "Flicker","Gravity Well","Helix","Figure 8","Tornado","Butterfly",
+    "Double Helix","Chaotic Sphere","Quantum Tunneling","Fractal Desync",
+    "Extreme Desync","Quantum Oscillation","Frame Skip",
+    "Seizure","Hyperdrive","Schrodinger","Glitch Storm","Dimensional Rift",
+    "Wormhole","Phantom","Supernova","Mirror","Pulse Wave",
+    "Echo","Singularity","Storm Cell",
+}
+
 local function computeVoidPosition(dt)
     local t  = VoidState.Elapsed
     local bY = CFG.Void.YBase + VoidState.YOffset
@@ -696,9 +361,7 @@ local function computeVoidPosition(dt)
         VoidState.X       = VoidState.X + VoidState.DirX * CFG.Void.DriftSpeed * dt
         VoidState.Z       = VoidState.Z + VoidState.DirZ * CFG.Void.DriftSpeed * dt
         VoidState.YOffset = VoidState.YOffset + VoidState.YDir * CFG.Void.YDriftSpeed * dt
-        if math.abs(VoidState.YOffset) >= CFG.Void.YDriftRange then
-            VoidState.YDir = -VoidState.YDir
-        end
+        if math.abs(VoidState.YOffset) >= CFG.Void.YDriftRange then VoidState.YDir = -VoidState.YDir end
         return Vector3.new(VoidState.X, CFG.Void.YBase + VoidState.YOffset, VoidState.Z)
 
     elseif m == "Chaotic" then
@@ -1023,7 +686,7 @@ local function computeVoidPosition(dt)
 end
 
 -- ═══════════════════════════════════════════
--- BYPASS ENGINE v3
+-- BYPASS ENGINE v4
 -- ═══════════════════════════════════════════
 local function detectCorrection(hrp, targetPos)
     if not hrp then return false end
@@ -1121,8 +784,8 @@ local function applyBypass(hrp, targetPos, dt)
             VoidState.AdaptiveTimer = 0
             local newMode = selectAdaptiveMode()
             if newMode ~= VoidState.AdaptiveMode then
-                VoidState.AdaptiveMode    = newMode
-                CFG.Stats.BypassSwitches  = CFG.Stats.BypassSwitches + 1
+                VoidState.AdaptiveMode   = newMode
+                CFG.Stats.BypassSwitches = CFG.Stats.BypassSwitches + 1
             end
         end
         mode = VoidState.AdaptiveMode
@@ -1186,7 +849,7 @@ local function applyBypass(hrp, targetPos, dt)
             pcall(function() hrp.AssemblyLinearVelocity = Vector3.zero end)
         end
 
-    else -- Extreme Networking
+    else
         writeCFrame(hrp, writePos)
         pcall(function()
             hrp.AssemblyLinearVelocity  = Vector3.zero
@@ -1356,6 +1019,41 @@ local function checkVoidEvasion()
 end
 
 -- ═══════════════════════════════════════════
+-- GHOST MODE
+-- ═══════════════════════════════════════════
+local function applyGhostMode(on)
+    local char = LP.Character
+    if not char then return end
+    for _, v in ipairs(char:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("MeshPart") or v:IsA("UnionOperation") then
+            pcall(function()
+                v.LocalTransparencyModifier = on and CFG.GhostMode.Transparency or 0
+            end)
+        end
+    end
+end
+
+-- ═══════════════════════════════════════════
+-- ANTI SPECTATOR
+-- ═══════════════════════════════════════════
+local function checkAntiSpec()
+    if not CFG.AntiSpec.On then return end
+    pcall(function()
+        local cam = workspace.CurrentCamera
+        if cam and cam.CameraSubject then
+            local subject = cam.CameraSubject
+            local isMyHum = LP.Character and (subject == LP.Character:FindFirstChildOfClass("Humanoid"))
+            if not isMyHum then
+                -- Spectator detected: scramble position
+                VoidState.X = VoidState.X + randSign() * 5e10
+                VoidState.Z = VoidState.Z + randSign() * 5e10
+                Library:Notify("Anti-Spec: Scrambled position", 2)
+            end
+        end
+    end)
+end
+
+-- ═══════════════════════════════════════════
 -- LOCK TO VOID — main per-frame logic
 -- ═══════════════════════════════════════════
 local function lockToVoid(dt)
@@ -1363,11 +1061,37 @@ local function lockToVoid(dt)
     if VoidState.EvadeCooldown > 0 then
         VoidState.EvadeCooldown = VoidState.EvadeCooldown - dt
     end
+
+    -- Chaos mode: auto-rotate through methods
+    if CFG.ChaosMode.On then
+        VoidState.ChaosTimer = VoidState.ChaosTimer + dt
+        if VoidState.ChaosTimer >= CFG.ChaosMode.Interval then
+            VoidState.ChaosTimer = 0
+            local idx = math.random(1, #allMethods)
+            CFG.Void.Method = allMethods[idx]
+            if CFG.Void.Method == "Seizure" then refreshSeizurePool() end
+            if CFG.Void.Method == "Echo"    then initEchoHistory()   end
+        end
+    end
+
+    -- Position logger
+    if CFG.PosLogger.On then
+        VoidState.LogTimer = VoidState.LogTimer + dt
+        if VoidState.LogTimer >= CFG.PosLogger.Interval then
+            VoidState.LogTimer = 0
+            print(string.format("[LE v4] Void XYZ: %.0f, %.0f, %.0f | Method: %s",
+                VoidState.X, CFG.Void.YBase + VoidState.YOffset, VoidState.Z,
+                CFG.Void.Method))
+        end
+    end
+
     checkVoidEvasion()
     VoidState.IntendedPos = computeVoidPosition(dt)
     CFG.Stats.CycleCount  = CFG.Stats.CycleCount + 1
+
     local hrp = getHRP(); if not hrp then return end
     applyBypass(hrp, VoidState.IntendedPos, dt)
+
     if CFG.Desync.On then
         stepSpoofPosition(dt)
         VoidState.DesyncTimer = VoidState.DesyncTimer + dt
@@ -1375,6 +1099,10 @@ local function lockToVoid(dt)
             VoidState.DesyncTimer = 0
             task.spawn(runDesyncFlicker)
         end
+    end
+
+    if CFG.GhostMode.On then
+        applyGhostMode(true)
     end
 end
 
@@ -1424,76 +1152,244 @@ local function stopVoid()
             hrp.AssemblyLinearVelocity = Vector3.zero
         end)
     end
+    if CFG.GhostMode.On then applyGhostMode(false) end
 end
+
+-- ═══════════════════════════════════════════
+-- ANTI SPEC LOOP
+-- ═══════════════════════════════════════════
+RunService.Heartbeat:Connect(function()
+    if CFG.AntiSpec.On then checkAntiSpec() end
+end)
+
+-- ═══════════════════════════════════════════
+-- HIT NUMBERS
+-- ═══════════════════════════════════════════
+local hitNumberGui = Instance.new("ScreenGui")
+hitNumberGui.Name           = "HitNumbers_LE"
+hitNumberGui.ResetOnSpawn   = false
+hitNumberGui.IgnoreGuiInset = true
+hitNumberGui.Parent         = LP:WaitForChild("PlayerGui")
+
+local function showHit(amount)
+    if not CFG.HitNumbers.On then return end
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.AutomaticSize          = Enum.AutomaticSize.XY
+    label.Text                   = tostring(math.floor(amount + 0.5))
+    label.Font                   = Enum.Font.Jura
+    label.TextColor3             = CFG.HitNumbers.Color
+    label.TextSize               = 50
+    label.TextStrokeTransparency = 0
+    label.TextStrokeColor3       = Color3.new(0, 0, 0)
+    label.TextTransparency       = 1
+    label.Position               = UDim2.new(0.5, math.random(-180, 180), 0.45, math.random(-120, 120))
+    label.AnchorPoint            = Vector2.new(0.5, 0.5)
+    label.Parent                 = hitNumberGui
+    TweenService:Create(label, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+    task.delay(CFG.HitNumbers.Duration, function()
+        TweenService:Create(label, TweenInfo.new(1), {TextTransparency = 1}):Play()
+        task.wait(1); label:Destroy()
+    end)
+end
+
+local function setupHumanoid(hum2)
+    local lastHealth = hum2.Health
+    hum2.HealthChanged:Connect(function(newHealth)
+        local dmg = lastHealth - newHealth
+        if dmg > 0.1 then showHit(dmg) end
+        lastHealth = newHealth
+    end)
+end
+
+Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(function(char)
+        local hum = char:WaitForChild("Humanoid")
+        if hum then setupHumanoid(hum) end
+    end)
+end)
+for _, plr in ipairs(Players:GetPlayers()) do
+    if plr.Character then
+        local hum = plr.Character:FindFirstChild("Humanoid")
+        if hum then setupHumanoid(hum) end
+    end
+end
+
+-- ═══════════════════════════════════════════
+-- CROSSHAIR
+-- ═══════════════════════════════════════════
+if LP.PlayerGui:FindFirstChild("CustomCrosshair_LE") then
+    LP.PlayerGui.CustomCrosshair_LE:Destroy()
+end
+local crosshairGui = Instance.new("ScreenGui")
+crosshairGui.Name           = "CustomCrosshair_LE"
+crosshairGui.ResetOnSpawn   = false
+crosshairGui.IgnoreGuiInset = true
+crosshairGui.Parent         = LP:WaitForChild("PlayerGui")
+local crosshairImg = Instance.new("ImageLabel", crosshairGui)
+crosshairImg.BackgroundTransparency = 1
+crosshairImg.AnchorPoint            = Vector2.new(0.5, 0.5)
+crosshairImg.Position               = UDim2.new(0.5, 0, 0.5, 0)
+crosshairImg.Size                   = UDim2.new(0, 24, 0, 24)
+crosshairImg.Image                  = "rbxassetid://97119437608195"
+crosshairImg.ImageTransparency      = 1
+
+-- ═══════════════════════════════════════════
+-- ESP
+-- ═══════════════════════════════════════════
+local espObjects = {}
+
+local function removeESP(p)
+    if espObjects[p] then
+        for _, obj in pairs(espObjects[p]) do
+            pcall(function() obj:Remove() end)
+        end
+        espObjects[p] = nil
+    end
+end
+
+local function buildESP(p)
+    if not CFG.ESP.On then return end
+    if p == LP then return end
+    removeESP(p)
+    local objs = {}
+
+    -- Box
+    local box = Drawing.new("Square")
+    box.Visible     = false
+    box.Color       = Color3.fromRGB(255, 50, 50)
+    box.Thickness   = 1.5
+    box.Filled      = false
+    box.Transparency = 1
+    objs.box = box
+
+    -- Name
+    local nameLabel = Drawing.new("Text")
+    nameLabel.Visible  = false
+    nameLabel.Color    = Color3.fromRGB(255, 255, 255)
+    nameLabel.Size     = 14
+    nameLabel.Center   = true
+    nameLabel.Outline  = true
+    nameLabel.Text     = p.Name
+    objs.name = nameLabel
+
+    -- HP bar (line)
+    local hpBar = Drawing.new("Line")
+    hpBar.Visible    = false
+    hpBar.Color      = Color3.fromRGB(50, 255, 50)
+    hpBar.Thickness  = 2
+    objs.hp = hpBar
+
+    -- Dist
+    local distLabel = Drawing.new("Text")
+    distLabel.Visible = false
+    distLabel.Color   = Color3.fromRGB(200, 200, 200)
+    distLabel.Size    = 12
+    distLabel.Center  = true
+    distLabel.Outline = true
+    objs.dist = distLabel
+
+    espObjects[p] = objs
+end
+
+local function updateESP()
+    if not CFG.ESP.On then
+        for p, _ in pairs(espObjects) do removeESP(p) end
+        return
+    end
+    local cam = workspace.CurrentCamera
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LP then continue end
+        if CFG.ESP.TeamCheck and isSameTeam(p) then
+            removeESP(p); continue
+        end
+        if not espObjects[p] then buildESP(p) end
+        local objs = espObjects[p]
+        if not objs then continue end
+
+        local char = p.Character
+        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        local head = char and char:FindFirstChild("Head")
+
+        if not hrp or not hum or not head then
+            for _, obj in pairs(objs) do pcall(function() obj.Visible = false end) end
+            continue
+        end
+
+        local dist = (hrp.Position - (getHRP() and getHRP().Position or Vector3.zero)).Magnitude
+        if dist > CFG.ESP.MaxDist then
+            for _, obj in pairs(objs) do pcall(function() obj.Visible = false end) end
+            continue
+        end
+
+        -- Project corners of a rough bounding box
+        local topPos    = head.Position + Vector3.new(0, 1.5, 0)
+        local bottomPos = hrp.Position  - Vector3.new(0, 3,   0)
+
+        local topSP,    topOn    = cam:WorldToViewportPoint(topPos)
+        local bottomSP, bottomOn = cam:WorldToViewportPoint(bottomPos)
+
+        if not topOn and not bottomOn then
+            for _, obj in pairs(objs) do pcall(function() obj.Visible = false end) end
+            continue
+        end
+
+        local x1 = math.min(topSP.X, bottomSP.X) - 20
+        local y1 = topSP.Y
+        local x2 = math.max(topSP.X, bottomSP.X) + 20
+        local y2 = bottomSP.Y
+        local w  = x2 - x1
+        local h  = y2 - y1
+
+        -- Box
+        if CFG.ESP.ShowBox and objs.box then
+            objs.box.Position    = Vector2.new(x1, y1)
+            objs.box.Size        = Vector2.new(w, h)
+            objs.box.Visible     = true
+        end
+
+        -- Name
+        if CFG.ESP.ShowName and objs.name then
+            objs.name.Position = Vector2.new((x1+x2)/2, y1 - 16)
+            objs.name.Text     = p.Name
+            objs.name.Visible  = true
+        end
+
+        -- HP bar
+        if CFG.ESP.ShowHP and objs.hp then
+            local hpPct  = clamp(hum.Health / hum.MaxHealth, 0, 1)
+            local barH   = h * hpPct
+            local barX   = x1 - 5
+            objs.hp.From    = Vector2.new(barX, y2)
+            objs.hp.To      = Vector2.new(barX, y2 - barH)
+            objs.hp.Color   = Color3.fromRGB(
+                math.floor((1-hpPct)*255),
+                math.floor(hpPct*255),
+                0
+            )
+            objs.hp.Visible = true
+        end
+
+        -- Distance
+        if CFG.ESP.ShowDist and objs.dist then
+            objs.dist.Position = Vector2.new((x1+x2)/2, y2 + 2)
+            objs.dist.Text     = string.format("%.0f", dist)
+            objs.dist.Visible  = true
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(updateESP)
+
+Players.PlayerRemoving:Connect(function(p) removeESP(p) end)
+Players.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function() buildESP(p) end)
+end)
 
 -- ═══════════════════════════════════════════
 -- KILL NOTIFIER
 -- ═══════════════════════════════════════════
-local notifList = {}
-local NOTIF_Y   = 80
-
-local notifSG = Instance.new("ScreenGui")
-notifSG.Name           = "VoidPremiumNotifs"
-notifSG.ResetOnSpawn   = false
-notifSG.IgnoreGuiInset = true
-notifSG.DisplayOrder   = 998
-pcall(function() notifSG.Parent = game:GetService("CoreGui") end)
-if not notifSG.Parent then notifSG.Parent = LP:WaitForChild("PlayerGui") end
-
-local function showNotif(txt, col, duration)
-    if not CFG.KillNotifier then return end
-    col      = col      or Color3.fromRGB(120, 80, 255)
-    duration = duration or 2.5
-    local f = Instance.new("Frame", notifSG)
-    f.Size             = UDim2.new(0, 220, 0, 32)
-    f.Position         = UDim2.new(0.5, -110, 0, NOTIF_Y + #notifList * 36)
-    f.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
-    f.BorderSizePixel  = 1
-    f.BorderColor3     = col
-    f.ZIndex           = 10
-    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 6)
-    local bar = Instance.new("Frame", f)
-    bar.Size             = UDim2.new(0, 3, 1, 0)
-    bar.BackgroundColor3 = col
-    bar.BorderSizePixel  = 0
-    bar.ZIndex           = 11
-    Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 3)
-    local lbl = Instance.new("TextLabel", f)
-    lbl.Size               = UDim2.new(1, -10, 1, 0)
-    lbl.Position           = UDim2.new(0, 8, 0, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Text               = txt
-    lbl.TextColor3         = Color3.new(1, 1, 1)
-    lbl.Font               = Enum.Font.GothamBold
-    lbl.TextSize           = 12
-    lbl.TextXAlignment     = Enum.TextXAlignment.Left
-    lbl.ZIndex             = 11
-    table.insert(notifList, f)
-    if CFG.KillSound then
-        pcall(function()
-            local snd = Instance.new("Sound", workspace)
-            snd.SoundId            = "rbxassetid://4764109000"
-            snd.Volume             = 0.4
-            snd.RollOffMaxDistance = 0
-            snd:Play()
-            Debris:AddItem(snd, 2)
-        end)
-    end
-    task.delay(duration, function()
-        pcall(function()
-            for i, v in ipairs(notifList) do
-                if v == f then table.remove(notifList, i); break end
-            end
-            f:Destroy()
-            for i, v in ipairs(notifList) do
-                pcall(function()
-                    v.Position = UDim2.new(0.5, -110, 0, NOTIF_Y + (i-1)*36)
-                end)
-            end
-        end)
-    end)
-end
-
 local watchedHumanoids = {}
 local function watchPlayer(p)
     if not p or p == LP then return end
@@ -1506,7 +1402,17 @@ local function watchPlayer(p)
         hum.Died:Connect(function()
             if CFG.KillNotifier then
                 CFG.Stats.KillCount = CFG.Stats.KillCount + 1
-                showNotif("☠ Eliminated " .. p.Name, Color3.fromRGB(120, 80, 255), 3)
+                Library:Notify("☠ Eliminated " .. p.Name, 3)
+                if CFG.KillSound then
+                    pcall(function()
+                        local snd = Instance.new("Sound", workspace)
+                        snd.SoundId            = "rbxassetid://4764109000"
+                        snd.Volume             = 0.4
+                        snd.RollOffMaxDistance = 0
+                        snd:Play()
+                        Debris:AddItem(snd, 2)
+                    end)
+                end
             end
             watchedHumanoids[hum] = nil
         end)
@@ -1517,439 +1423,542 @@ end
 for _, p in ipairs(Players:GetPlayers()) do watchPlayer(p) end
 Players.PlayerAdded:Connect(watchPlayer)
 
--- ═══════════════════════════════════════════
--- UI: TAB 1 — VOID
--- ═══════════════════════════════════════════
-local s_v_control   = tabs.void:CreateSection("Void Control")
-local s_v_method    = tabs.void:CreateSection("All Methods")
-local s_v_antirager = tabs.void:CreateSection("Anti-Rager Methods")
-local s_v_new       = tabs.void:CreateSection("v1.2 Methods")
-local s_v_params    = tabs.void:CreateSection("Parameters")
+-- ═══════════════════════════════════════════════════
+-- PRESET CONFIGS (applied in Settings tab)
+-- ═══════════════════════════════════════════════════
 
-local voidStatusLabel = s_v_control:CreateLabel("Status: INACTIVE")
-
-s_v_control:CreateToggle("Enable Voidspam", false, function(v)
-    CFG.Void.On = v
-    if v then
-        startVoid()
-        voidStatusLabel:UpdateText("Status: ACTIVE ⚡")
-    else
-        stopVoid()
-        voidStatusLabel:UpdateText("Status: INACTIVE")
-    end
-end)
-s_v_control:CreateLabel("Adaptive bypass auto-selects best mode per method")
-
-local allMethods = {
-    "Stable","Drift","Chaotic","Circle","Spiral","Lissajous","Perlin Noise",
-    "Flicker","Gravity Well","Helix","Figure 8","Tornado","Butterfly",
-    "Double Helix","Chaotic Sphere","Quantum Tunneling","Fractal Desync",
-    "Extreme Desync","Quantum Oscillation","Frame Skip",
-    "Seizure","Hyperdrive","Schrodinger","Glitch Storm","Dimensional Rift",
-    "Wormhole","Phantom","Supernova","Mirror","Pulse Wave",
-    "Echo","Singularity","Storm Cell",
-}
-
-s_v_method:CreateDropdown("All Void Methods", allMethods, function(v)
-    CFG.Void.Method = v
-    if v == "Seizure" then refreshSeizurePool() end
-    if v == "Echo"    then initEchoHistory()   end
-end, "Quantum Tunneling", false)
-
-s_v_antirager:CreateLabel("Seizure · Hyperdrive · Schrodinger")
-s_v_antirager:CreateLabel("Glitch Storm · Dimensional Rift")
-s_v_antirager:CreateSlider("Seizure Speed (pos/sec)", 1, 200, 50, true, function(v) CFG.SeizureSpeed    = v end)
-s_v_antirager:CreateSlider("Hyperdrive Speed",         1, 100, 20, true, function(v) CFG.HyperdriveSpeed = v end)
-s_v_antirager:CreateSlider("Glitch Layers",            1,   8,  5, true, function(v) CFG.GlitchLayers    = v end)
-s_v_antirager:CreateSlider("Rift Phase",               2,   9,  3, true, function(v) CFG.RiftPhase       = v end)
-s_v_antirager:CreateButton("Refresh Seizure Pool", function()
+-- Preset 1: "Max Rage" — maximum chaos, seizure, triple flicker, full evasion
+local function applyPreset_MaxRage()
+    CFG.Void.Method           = "Seizure"
+    CFG.Bypass.Mode           = "Adaptive"
+    CFG.Desync.On             = true
+    CFG.Desync.TripleFlicker  = true
+    CFG.Desync.BaitMode       = true
+    CFG.Desync.Tick           = 0.10
+    CFG.Evade.On              = true
+    CFG.Evade.ProjDetect      = true
+    CFG.ChaosMode.On          = false
+    CFG.Bypass.Jitter         = true
+    CFG.Bypass.JitterScale    = 100
+    CFG.Bypass.AntiCorrect    = true
+    CFG.Bypass.NetworkPulse   = true
+    CFG.Bypass.PulseStrength  = 5e7
     refreshSeizurePool()
-    window:Notify("Seizure Pool", "64 new positions generated", 3)
-end)
+    Library:Notify("Max Rage preset applied — Seizure + Triple Flicker + Bait + Full Evasion", 4)
+end
 
-s_v_new:CreateLabel("Wormhole · Phantom · Supernova")
-s_v_new:CreateLabel("Mirror · Pulse Wave · Echo · Singularity · Storm Cell")
-s_v_new:CreateSlider("Wormhole Exits",      2,  12,  6, true, function(v) CFG.WormholeCount = v     end)
-s_v_new:CreateSlider("Phantom Layers",      2,   8,  4, true, function(v) CFG.PhantomLayers = v     end)
-s_v_new:CreateSlider("Storm Radius (e10)", 1, 100, 50, true, function(v) CFG.StormRadius    = v*1e10 end)
-s_v_new:CreateSlider("Collapse Speed",      1,  20,  8, true, function(v) CFG.CollapseSpeed  = v     end)
-s_v_new:CreateSlider("Pulse Wave Freq",     1,  20,  7, true, function(v) CFG.PulseWaveFreq  = v     end)
-s_v_new:CreateSlider("Echo Delay (frames)", 1,  30, 10, true, function(v) CFG.EchoDelay      = v/60  end)
-s_v_new:CreateToggle("Mirror All Axes", true, function(v) CFG.MirrorAxes = v end)
+-- Preset 2: "Ghost Drift" — stable silent drift, ghost mode, no chaos, subtle
+local function applyPreset_GhostDrift()
+    CFG.Void.Method           = "Drift"
+    CFG.Bypass.Mode           = "Clean CFrame"
+    CFG.Desync.On             = true
+    CFG.Desync.TripleFlicker  = false
+    CFG.Desync.BaitMode       = false
+    CFG.Desync.Tick           = 0.25
+    CFG.Evade.On              = true
+    CFG.Evade.ProjDetect      = true
+    CFG.ChaosMode.On          = false
+    CFG.GhostMode.On          = true
+    CFG.Bypass.Jitter         = false
+    CFG.Bypass.JitterScale    = 10
+    CFG.Bypass.AntiCorrect    = true
+    CFG.Bypass.NetworkPulse   = false
+    applyGhostMode(true)
+    Library:Notify("Ghost Drift preset applied — Drift + Ghost Mode + Clean CFrame", 4)
+end
 
-s_v_params:CreateSlider("Drift Speed (M/s)",    1, 200,  9, true, function(v) CFG.Void.DriftSpeed  = v*1e6 end)
-s_v_params:CreateSlider("Drift Chaos %",        1, 100, 98, true, function(v) CFG.Void.DriftChaos  = v*0.01 end)
-s_v_params:CreateSlider("Void Altitude (B)",    1,1000, 10, true, function(v) CFG.Void.YBase        = v*1e9 end)
-s_v_params:CreateSlider("Y Drift Range (B)",    0,  10,  2, true, function(v) CFG.Void.YDriftRange  = v*1e9 end)
-s_v_params:CreateSlider("Lissajous A",          1,  10,  2, true, function(v) CFG.LissajousA        = v end)
-s_v_params:CreateSlider("Lissajous B",          1,  10,  3, true, function(v) CFG.LissajousB        = v end)
-s_v_params:CreateSlider("Gravity Well (M)",     1,1000,100, true, function(v) CFG.GravityStr        = v*1e6 end)
-s_v_params:CreateSlider("Flicker Interval (ms)",1,  50,  5, true, function(v) CFG.FlickerInterval   = v*0.01 end)
+-- ═══════════════════════════════════════════════════
+-- UI TABS
+-- ═══════════════════════════════════════════════════
 
--- ═══════════════════════════════════════════
--- UI: TAB 2 — RAGEBOT
--- ═══════════════════════════════════════════
-local s_rb_status = tabs.ragebot:CreateSection("Status")
-local s_rb_main   = tabs.ragebot:CreateSection("Ragebot")
-local s_rb_filter = tabs.ragebot:CreateSection("Filters")
-local s_rb_reload = tabs.ragebot:CreateSection("Auto Reload")
-local s_rb_wb     = tabs.ragebot:CreateSection("Wall Bang Teleport")
+-- ══════════════════════
+-- VOID TAB
+-- ══════════════════════
+local V_L = Tabs.Void:AddLeftGroupbox("Void Control")
+local V_R = Tabs.Void:AddRightGroupbox("Void Parameters")
+local V_M = Tabs.Void:AddLeftGroupbox("Method Settings")
+local V_N = Tabs.Void:AddRightGroupbox("v1.2+ Methods")
 
-s_rb_status:CreateLabel("Modules: " .. (ragebotModsOk and "Loaded ✓" or "FAILED ✗"))
-s_rb_status:CreateLabel("Method: Fires UseItem remote to server")
-s_rb_status:CreateLabel("Wall Bang: Teleports into target before each shot")
-s_rb_status:CreateLabel("Works best with Void active — void repositions after shot")
+V_L:AddToggle("VoidOn", {Text="Enable Voidspam", Default=false, Callback=function(v)
+    CFG.Void.On = v
+    if v then startVoid() else stopVoid() end
+end})
+V_L:AddLabel("Adaptive bypass auto-selects best mode per method")
+V_L:AddDropdown("VoidMethod", {
+    Text    = "Void Method",
+    Default = "Quantum Tunneling",
+    Values  = allMethods,
+    Callback = function(v)
+        CFG.Void.Method = v
+        if v == "Seizure" then refreshSeizurePool() end
+        if v == "Echo"    then initEchoHistory()   end
+    end,
+})
+V_L:AddToggle("ChaosModeOn", {Text="Chaos Mode (auto-rotate methods)", Default=false, Callback=function(v)
+    CFG.ChaosMode.On = v
+end})
+V_L:AddSlider("ChaosInterval", {Text="Chaos Interval (s)", Default=8, Min=1, Max=30, Rounding=1, Callback=function(v)
+    CFG.ChaosMode.Interval = v * 0.1
+end})
+V_L:AddButton({Text="Refresh Seizure Pool", Func=function()
+    refreshSeizurePool()
+    Library:Notify("64 new Seizure positions generated", 3)
+end})
 
-s_rb_main:CreateToggle("Enabled", false, function(v)
-    CFG.Ragebot.On = v
-    if v then
-        startRagebot()
-    else
-        stopRagebot()
-    end
-end)
+V_R:AddSlider("VoidDriftSpeed", {Text="Drift Speed (M/s)", Default=9, Min=1, Max=200, Rounding=0, Callback=function(v)
+    CFG.Void.DriftSpeed = v * 1e6
+end})
+V_R:AddSlider("VoidDriftChaos", {Text="Drift Chaos %", Default=98, Min=1, Max=100, Rounding=0, Callback=function(v)
+    CFG.Void.DriftChaos = v * 0.01
+end})
+V_R:AddSlider("VoidAltitude", {Text="Void Altitude (B)", Default=10, Min=1, Max=1000, Rounding=0, Callback=function(v)
+    CFG.Void.YBase = v * 1e9
+end})
+V_R:AddSlider("VoidYDriftRange", {Text="Y Drift Range (B)", Default=2, Min=0, Max=10, Rounding=0, Callback=function(v)
+    CFG.Void.YDriftRange = v * 1e9
+end})
+V_R:AddSlider("VoidLissA", {Text="Lissajous A", Default=2, Min=1, Max=10, Rounding=0, Callback=function(v)
+    CFG.LissajousA = v
+end})
+V_R:AddSlider("VoidLissB", {Text="Lissajous B", Default=3, Min=1, Max=10, Rounding=0, Callback=function(v)
+    CFG.LissajousB = v
+end})
+V_R:AddSlider("VoidGravity", {Text="Gravity Well (M)", Default=100, Min=1, Max=1000, Rounding=0, Callback=function(v)
+    CFG.GravityStr = v * 1e6
+end})
+V_R:AddSlider("VoidFlicker", {Text="Flicker Interval (ms)", Default=5, Min=1, Max=50, Rounding=0, Callback=function(v)
+    CFG.FlickerInterval = v * 0.01
+end})
 
-s_rb_filter:CreateSlider("Max Distance (studs)", 10, 999, 999, true, function(v)
-    CFG.Ragebot.MaxDistance = v
-end)
-s_rb_filter:CreateToggle("Team Check",    false, function(v) CFG.Ragebot.TeamCheck    = v end)
-s_rb_filter:CreateToggle("Visible Check", false, function(v) CFG.Ragebot.VisibleCheck = v end)
-s_rb_filter:CreateLabel("Visible OFF = fires through walls using camera offsets")
-s_rb_filter:CreateLabel("Visible ON  = only fires when clear line of sight exists")
+V_M:AddLabel("Anti-Rager Methods")
+V_M:AddSlider("SeizureSpeed", {Text="Seizure Speed", Default=50, Min=1, Max=200, Rounding=0, Callback=function(v)
+    CFG.SeizureSpeed = v
+end})
+V_M:AddSlider("HyperdriveSpeed", {Text="Hyperdrive Speed", Default=20, Min=1, Max=100, Rounding=0, Callback=function(v)
+    CFG.HyperdriveSpeed = v
+end})
+V_M:AddSlider("GlitchLayers", {Text="Glitch Layers", Default=5, Min=1, Max=8, Rounding=0, Callback=function(v)
+    CFG.GlitchLayers = v
+end})
+V_M:AddSlider("RiftPhase", {Text="Rift Phase", Default=3, Min=2, Max=9, Rounding=0, Callback=function(v)
+    CFG.RiftPhase = v
+end})
 
-s_rb_reload:CreateLabel("Auto reloads when ammo hits 0 using UseItem remote")
-s_rb_reload:CreateToggle("Auto Reload", true, function(v) CFG.Ragebot.AutoReload = v end)
-s_rb_reload:CreateButton("Force Reload Now", function()
-    if not fighter_mod or not fighter_mod.LocalFighter then
-        window:Notify("Ragebot", "FighterController not loaded", 3)
-        return
-    end
-    local item = fighter_mod.LocalFighter.EquippedItem
-    if item then
-        tryRagebotReload(item)
-        window:Notify("Reload", "Reload fired", 2)
-    else
-        window:Notify("Reload", "No item equipped", 3)
-    end
-end)
+V_N:AddLabel("Wormhole · Phantom · Supernova")
+V_N:AddLabel("Mirror · Pulse Wave · Echo · Singularity · Storm Cell")
+V_N:AddSlider("WormholeCount", {Text="Wormhole Exits", Default=6, Min=2, Max=12, Rounding=0, Callback=function(v)
+    CFG.WormholeCount = v
+end})
+V_N:AddSlider("PhantomLayers", {Text="Phantom Layers", Default=4, Min=2, Max=8, Rounding=0, Callback=function(v)
+    CFG.PhantomLayers = v
+end})
+V_N:AddSlider("StormRadius", {Text="Storm Radius (x10)", Default=50, Min=1, Max=100, Rounding=0, Callback=function(v)
+    CFG.StormRadius = v * 1e10
+end})
+V_N:AddSlider("CollapseSpeed", {Text="Collapse Speed", Default=8, Min=1, Max=20, Rounding=0, Callback=function(v)
+    CFG.CollapseSpeed = v
+end})
+V_N:AddSlider("PulseWaveFreq", {Text="Pulse Wave Freq", Default=7, Min=1, Max=20, Rounding=0, Callback=function(v)
+    CFG.PulseWaveFreq = v
+end})
+V_N:AddSlider("EchoDelay", {Text="Echo Delay (frames)", Default=10, Min=1, Max=30, Rounding=0, Callback=function(v)
+    CFG.EchoDelay = v / 60
+end})
+V_N:AddToggle("MirrorAxes", {Text="Mirror All Axes", Default=true, Callback=function(v)
+    CFG.MirrorAxes = v
+end})
 
--- Wall Bang Teleport section
-s_rb_wb:CreateLabel("Teleports YOUR character into the enemy right before each shot")
-s_rb_wb:CreateLabel("The UseItem remote fires while you are inside their hitbox")
-s_rb_wb:CreateLabel("This forces damage to register regardless of walls or geometry")
-s_rb_wb:CreateLabel("If Void is ON: void repositions you back after each shot")
-s_rb_wb:CreateLabel("If Void is OFF: position restores next frame automatically")
+-- ══════════════════════
+-- BYPASS TAB
+-- ══════════════════════
+local BP_L = Tabs.Bypass:AddLeftGroupbox("Bypass Mode")
+local BP_R = Tabs.Bypass:AddRightGroupbox("Advanced Options")
+local BP_I = Tabs.Bypass:AddLeftGroupbox("Mode Guide")
 
-s_rb_wb:CreateToggle("Enable Wall Bang Teleport", false, function(v)
-    CFG.Ragebot.WallBang = v
-    if not v then stopWallBang() end
-end)
-
-s_rb_wb:CreateToggle("Restore Position After Shot", true, function(v)
-    CFG.Ragebot.WallBangRestore = v
-end)
-
-s_rb_wb:CreateSlider("Teleport Offset (studs inside target)", 0, 5, 1, false, function(v)
-    -- divide by 10 because slider is integer only, gives 0.0 to 0.5
-    CFG.Ragebot.WallBangOffset = v * 0.1
-end)
-
-s_rb_wb:CreateButton("🔍 Show Current Target", function()
-    if RagebotState.currentTarget then
-        local targetName = "Unknown"
-        local p = Players:GetPlayerFromCharacter(RagebotState.currentTarget)
-        if p then targetName = p.Name end
-        local myHRP  = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-        local eHRP   = RagebotState.currentTarget:FindFirstChild("HumanoidRootPart")
-        local dist   = "?"
-        if myHRP and eHRP then
-            dist = tostring(math.floor((eHRP.Position - myHRP.Position).Magnitude))
-        end
-        window:Notify("Ragebot Target", targetName .. " — " .. dist .. " studs", 4)
-    else
-        window:Notify("Ragebot", "No current target", 3)
-    end
-end)
-
-s_rb_wb:CreateButton("■ Stop Wall Bang", function()
-    stopWallBang()
-    window:Notify("Wall Bang", "Stopped and position restored", 2)
-end)
-
--- ═══════════════════════════════════════════
--- UI: TAB 3 — BYPASS ENGINE
--- ═══════════════════════════════════════════
-local s_bp_mode  = tabs.bypass:CreateSection("Bypass Mode")
-local s_bp_adapt = tabs.bypass:CreateSection("Adaptive Engine")
-local s_bp_pulse = tabs.bypass:CreateSection("Network Pulse")
-local s_bp_adv   = tabs.bypass:CreateSection("Advanced Options")
-local s_bp_info  = tabs.bypass:CreateSection("Mode Guide")
-
-local bypassModeLabel = s_bp_mode:CreateLabel("Active: Adaptive")
-local bypassModes = {
-    "Adaptive","Extreme Networking","Clean CFrame","Velocity",
-    "Hybrid","Physics Chaos","Multi-Write","Momentum Carry",
-}
-s_bp_mode:CreateDropdown("Bypass Mode", bypassModes, function(v)
-    CFG.Bypass.Mode = v
-    bypassModeLabel:UpdateText("Active: " .. v)
-end, "Adaptive", false)
-
-s_bp_adapt:CreateLabel("Adaptive auto-selects per void method")
-s_bp_adapt:CreateSlider("Adaptive Sensitivity %", 1, 100, 70, true, function(v)
+BP_L:AddDropdown("BypassMode", {
+    Text    = "Bypass Mode",
+    Default = "Adaptive",
+    Values  = {"Adaptive","Extreme Networking","Clean CFrame","Velocity","Hybrid","Physics Chaos","Multi-Write","Momentum Carry"},
+    Callback = function(v)
+        CFG.Bypass.Mode = v
+    end,
+})
+BP_L:AddSlider("BypassAdaptSens", {Text="Adaptive Sensitivity %", Default=70, Min=1, Max=100, Rounding=0, Callback=function(v)
     CFG.Bypass.AdaptiveSensitivity = v * 0.01
-end)
-
-s_bp_pulse:CreateToggle("Network Pulse", true, function(v) CFG.Bypass.NetworkPulse = v end)
-s_bp_pulse:CreateSlider("Pulse Rate (1/N frames)", 1, 30, 8, true, function(v)
+end})
+BP_L:AddToggle("BypassPulse", {Text="Network Pulse", Default=true, Callback=function(v)
+    CFG.Bypass.NetworkPulse = v
+end})
+BP_L:AddSlider("BypassPulseRate", {Text="Pulse Rate (1/N frames)", Default=8, Min=1, Max=30, Rounding=0, Callback=function(v)
     CFG.Bypass.PulseRate = v
-end)
-s_bp_pulse:CreateSlider("Pulse Strength (M)", 1, 100, 20, true, function(v)
+end})
+BP_L:AddSlider("BypassPulseStr", {Text="Pulse Strength (M)", Default=20, Min=1, Max=100, Rounding=0, Callback=function(v)
     CFG.Bypass.PulseStrength = v * 1e6
-end)
+end})
 
-s_bp_adv:CreateToggle("Anti-Correction", true, function(v) CFG.Bypass.AntiCorrect = v end)
-s_bp_adv:CreateSlider("Anti-Correct Strength", 1, 10, 3, true, function(v)
+BP_R:AddToggle("BypassAntiCorrect", {Text="Anti-Correction", Default=true, Callback=function(v)
+    CFG.Bypass.AntiCorrect = v
+end})
+BP_R:AddSlider("BypassAntiCorrectStr", {Text="Anti-Correct Strength", Default=3, Min=1, Max=10, Rounding=0, Callback=function(v)
     CFG.Bypass.AntiCorrectStr = v
-end)
-s_bp_adv:CreateToggle("Multi-Write", false, function(v) CFG.Bypass.MultiWrite = v end)
-s_bp_adv:CreateSlider("Multi-Write Count", 2, 8, 3, true, function(v)
+end})
+BP_R:AddToggle("BypassMultiWrite", {Text="Multi-Write", Default=false, Callback=function(v)
+    CFG.Bypass.MultiWrite = v
+end})
+BP_R:AddSlider("BypassMultiWriteCount", {Text="Multi-Write Count", Default=3, Min=2, Max=8, Rounding=0, Callback=function(v)
     CFG.Bypass.MultiWriteCount = v
-end)
-s_bp_adv:CreateToggle("Momentum Carry", false, function(v) CFG.Bypass.Momentum = v end)
-s_bp_adv:CreateSlider("Momentum Decay %", 1, 99, 85, true, function(v)
+end})
+BP_R:AddToggle("BypassMomentum", {Text="Momentum Carry", Default=false, Callback=function(v)
+    CFG.Bypass.Momentum = v
+end})
+BP_R:AddSlider("BypassMomentumDecay", {Text="Momentum Decay %", Default=85, Min=1, Max=99, Rounding=0, Callback=function(v)
     CFG.Bypass.MomentumDecay = v * 0.01
-end)
-s_bp_adv:CreateToggle("Position Jitter", true, function(v) CFG.Bypass.Jitter = v end)
-s_bp_adv:CreateSlider("Jitter Scale (studs)", 1, 500, 50, true, function(v)
+end})
+BP_R:AddToggle("BypassJitter", {Text="Position Jitter", Default=true, Callback=function(v)
+    CFG.Bypass.Jitter = v
+end})
+BP_R:AddSlider("BypassJitterScale", {Text="Jitter Scale (studs)", Default=50, Min=1, Max=500, Rounding=0, Callback=function(v)
     CFG.Bypass.JitterScale = v
-end)
+end})
 
-s_bp_info:CreateLabel("Adaptive     → auto per method ✓ best")
-s_bp_info:CreateLabel("Extreme Net  → all methods, max force")
-s_bp_info:CreateLabel("Clean CFrame → smooth orbit methods")
-s_bp_info:CreateLabel("Physics Chaos→ teleport methods")
-s_bp_info:CreateLabel("Multi-Write  → flip methods (Schrodinger)")
-s_bp_info:CreateLabel("Momentum     → slow drift methods")
-s_bp_info:CreateLabel("Velocity     → most subtle, slowest")
+BP_I:AddLabel("Adaptive     → auto per method ✓ best")
+BP_I:AddLabel("Extreme Net  → all methods, max force")
+BP_I:AddLabel("Clean CFrame → smooth orbit methods")
+BP_I:AddLabel("Physics Chaos→ teleport methods")
+BP_I:AddLabel("Multi-Write  → flip methods (Schrodinger)")
+BP_I:AddLabel("Momentum     → slow drift methods")
+BP_I:AddLabel("Velocity     → most subtle, slowest")
 
--- ═══════════════════════════════════════════
--- UI: TAB 4 — DESYNC
--- ═══════════════════════════════════════════
-local s_ds_main = tabs.desync:CreateSection("Desync Settings")
-local s_ds_bait = tabs.desync:CreateSection("Bait Mode")
-local s_ds_info = tabs.desync:CreateSection("How It Works")
+-- ══════════════════════
+-- DESYNC TAB
+-- ══════════════════════
+local DS_L = Tabs.Desync:AddLeftGroupbox("Desync Settings")
+local DS_R = Tabs.Desync:AddRightGroupbox("Bait Mode")
+local DS_I = Tabs.Desync:AddLeftGroupbox("Info")
 
-s_ds_main:CreateToggle("Enable Desync", true, function(v) CFG.Desync.On = v end)
-s_ds_main:CreateSlider("Desync Rate (x0.01s)", 1, 100, 18, true, function(v) CFG.Desync.Tick        = v*0.01 end)
-s_ds_main:CreateSlider("Spoof Radius (studs)", 1, 100, 22, true, function(v) CFG.Desync.Radius      = v      end)
-s_ds_main:CreateSlider("Wander Speed",         1, 100, 35, true, function(v) CFG.Desync.WanderSpeed = v*0.1  end)
-s_ds_main:CreateSlider("Wander Chaos %",       1, 100, 40, true, function(v) CFG.Desync.WanderChaos = v*0.01 end)
-s_ds_main:CreateToggle("Triple Flicker", false, function(v) CFG.Desync.TripleFlicker = v end)
+DS_L:AddToggle("DesyncOn", {Text="Enable Desync", Default=true, Callback=function(v)
+    CFG.Desync.On = v
+end})
+DS_L:AddSlider("DesyncTick", {Text="Desync Rate (x0.01s)", Default=18, Min=1, Max=100, Rounding=0, Callback=function(v)
+    CFG.Desync.Tick = v * 0.01
+end})
+DS_L:AddSlider("DesyncRadius", {Text="Spoof Radius (studs)", Default=22, Min=1, Max=100, Rounding=0, Callback=function(v)
+    CFG.Desync.Radius = v
+end})
+DS_L:AddSlider("DesyncWanderSpeed", {Text="Wander Speed", Default=35, Min=1, Max=100, Rounding=0, Callback=function(v)
+    CFG.Desync.WanderSpeed = v * 0.1
+end})
+DS_L:AddSlider("DesyncWanderChaos", {Text="Wander Chaos %", Default=40, Min=1, Max=100, Rounding=0, Callback=function(v)
+    CFG.Desync.WanderChaos = v * 0.01
+end})
+DS_L:AddToggle("DesyncTriple", {Text="Triple Flicker", Default=false, Callback=function(v)
+    CFG.Desync.TripleFlicker = v
+end})
 
-s_ds_bait:CreateLabel("Bait: moves spoof toward nearest enemy")
-s_ds_bait:CreateLabel("Makes enemies shoot at fake position")
-s_ds_bait:CreateToggle("Enable Bait Mode", false, function(v) CFG.Desync.BaitMode   = v end)
-s_ds_bait:CreateSlider("Bait Offset (studs)", 1, 50, 15, true, function(v) CFG.Desync.BaitOffset = v end)
+DS_R:AddLabel("Moves spoof position toward nearest enemy")
+DS_R:AddLabel("Makes enemies shoot at your fake hitbox")
+DS_R:AddToggle("DesyncBait", {Text="Enable Bait Mode", Default=false, Callback=function(v)
+    CFG.Desync.BaitMode = v
+end})
+DS_R:AddSlider("DesyncBaitOffset", {Text="Bait Offset (studs)", Default=15, Min=1, Max=50, Rounding=0, Callback=function(v)
+    CFG.Desync.BaitOffset = v
+end})
 
-s_ds_info:CreateLabel("Flickers HRP to ground-level briefly.")
-s_ds_info:CreateLabel("Server hitbox splits from client visual.")
-s_ds_info:CreateLabel("Triple flicker = 3x split per cycle.")
-s_ds_info:CreateLabel("Bait mode lures enemy shots to fake pos.")
+DS_I:AddLabel("Flickers HRP to ground-level briefly.")
+DS_I:AddLabel("Server hitbox splits from client visual.")
+DS_I:AddLabel("Triple flicker = 3x split per cycle.")
+DS_I:AddLabel("Bait mode lures enemy shots to fake pos.")
 
--- ═══════════════════════════════════════════
--- UI: TAB 5 — EVASION
--- ═══════════════════════════════════════════
-local s_ev_main = tabs.evasion:CreateSection("Void Evasion")
-local s_ev_proj = tabs.evasion:CreateSection("Projectile Detection")
-local s_ev_adv  = tabs.evasion:CreateSection("Advanced")
+-- ══════════════════════
+-- EVASION TAB
+-- ══════════════════════
+local EV_L = Tabs.Evasion:AddLeftGroupbox("Void Evasion")
+local EV_R = Tabs.Evasion:AddRightGroupbox("Projectile Detection")
+local EV_A = Tabs.Evasion:AddLeftGroupbox("Advanced")
 
-s_ev_main:CreateToggle("Enable Evasion", true, function(v) CFG.Evade.On = v end)
-s_ev_main:CreateSlider("Evasion Radius (B)",    1,  50,  8, true, function(v) CFG.Evade.Radius   = v*1e9   end)
-s_ev_main:CreateSlider("Evasion Speed (B)",     1,  50,  6, true, function(v) CFG.Evade.Speed    = v*1e9   end)
-s_ev_main:CreateSlider("Evasion Cooldown (ms)", 1, 200, 50, true, function(v) CFG.Evade.Cooldown = v*0.001 end)
+EV_L:AddToggle("EvadeOn", {Text="Enable Evasion", Default=true, Callback=function(v)
+    CFG.Evade.On = v
+end})
+EV_L:AddSlider("EvadeRadius", {Text="Evasion Radius (B)", Default=8, Min=1, Max=50, Rounding=0, Callback=function(v)
+    CFG.Evade.Radius = v * 1e9
+end})
+EV_L:AddSlider("EvadeSpeed", {Text="Evasion Speed (B)", Default=6, Min=1, Max=50, Rounding=0, Callback=function(v)
+    CFG.Evade.Speed = v * 1e9
+end})
+EV_L:AddSlider("EvadeCooldown", {Text="Evasion Cooldown (ms)", Default=50, Min=1, Max=200, Rounding=0, Callback=function(v)
+    CFG.Evade.Cooldown = v * 0.001
+end})
 
-s_ev_proj:CreateLabel("Scans for fast-moving parts heading toward void pos")
-s_ev_proj:CreateToggle("Projectile Detection", true, function(v) CFG.Evade.ProjDetect = v end)
-s_ev_proj:CreateSlider("Detection Range (studs)", 50, 1000, 500, true, function(v) CFG.Evade.ProjRange = v end)
-s_ev_proj:CreateSlider("Min Projectile Speed",    20,  500,  80, true, function(v) CFG.Evade.ProjSpeed = v end)
+EV_R:AddLabel("Scans for fast-moving parts heading toward void pos")
+EV_R:AddToggle("EvadeProjDetect", {Text="Projectile Detection", Default=true, Callback=function(v)
+    CFG.Evade.ProjDetect = v
+end})
+EV_R:AddSlider("EvadeProjRange", {Text="Detection Range (studs)", Default=500, Min=50, Max=1000, Rounding=0, Callback=function(v)
+    CFG.Evade.ProjRange = v
+end})
+EV_R:AddSlider("EvadeProjSpeed", {Text="Min Projectile Speed", Default=80, Min=20, Max=500, Rounding=0, Callback=function(v)
+    CFG.Evade.ProjSpeed = v
+end})
 
-s_ev_adv:CreateSlider("Vertical Escape (B)", 1, 50, 3,  true, function(v) CFG.Evade.Vertical = v*1e9 end)
-s_ev_adv:CreateSlider("Vertical Bias %",     0,100, 50, true, function(v) CFG.Evade.VertBias  = v*0.01 end)
-s_ev_adv:CreateToggle("Force Upward Escape", false, function(v) CFG.Evade.ForceUp = v end)
+EV_A:AddSlider("EvadeVertical", {Text="Vertical Escape (B)", Default=3, Min=1, Max=50, Rounding=0, Callback=function(v)
+    CFG.Evade.Vertical = v * 1e9
+end})
+EV_A:AddSlider("EvadeVertBias", {Text="Vertical Bias %", Default=50, Min=0, Max=100, Rounding=0, Callback=function(v)
+    CFG.Evade.VertBias = v * 0.01
+end})
+EV_A:AddToggle("EvadeForceUp", {Text="Force Upward Escape", Default=false, Callback=function(v)
+    CFG.Evade.ForceUp = v
+end})
 
--- ═══════════════════════════════════════════
--- UI: TAB 6 — NOTIFIER
--- ═══════════════════════════════════════════
-local s_not_main = tabs.notifier:CreateSection("Kill Notifier")
-local s_not_ac   = tabs.notifier:CreateSection("Anti-Cheat Bypass Status")
+-- ══════════════════════
+-- VISUALS TAB
+-- ══════════════════════
+local VS_L = Tabs.Visuals:AddLeftGroupbox("Crosshair")
+local VS_R = Tabs.Visuals:AddRightGroupbox("Hit Numbers")
+local VS_E = Tabs.Visuals:AddLeftGroupbox("ESP")
+local VS_G = Tabs.Visuals:AddRightGroupbox("Ghost Mode")
 
-s_not_main:CreateToggle("Enable Kill Notifier", true, function(v) CFG.KillNotifier = v end)
-s_not_main:CreateToggle("Kill Sound",           true, function(v) CFG.KillSound    = v end)
-s_not_main:CreateButton("Test Notification", function()
-    showNotif("☠ Eliminated TestPlayer", Color3.fromRGB(120, 80, 255), 3)
-end)
+VS_L:AddToggle("CrossOn", {Text="Enable Crosshair", Default=false, Callback=function(v)
+    CFG.Crosshair.On = v
+    crosshairImg.ImageTransparency = v and 0 or 1
+    UIS.MouseIconEnabled = not v
+end})
+VS_L:AddSlider("CrossSize", {Text="Size", Default=24, Min=8, Max=64, Rounding=0, Callback=function(v)
+    CFG.Crosshair.Size = v
+    crosshairImg.Size = UDim2.new(0, v, 0, v)
+end})
+VS_L:AddButton({Text="Reset Crosshair Image", Func=function()
+    crosshairImg.Image = "rbxassetid://97119437608195"
+end})
 
-s_not_ac:CreateLabel("AC Bypass: ACTIVE ✓")
-s_not_ac:CreateLabel("Hooks getrenv().setmetatable")
-s_not_ac:CreateLabel("Intercepts MiscellaneousController")
-s_not_ac:CreateLabel("Returns dummy table to break tracking")
-s_not_ac:CreateLabel("Applied at line 1 — always on")
+VS_R:AddToggle("HitNumOn", {Text="Enable Hit Numbers", Default=true, Callback=function(v)
+    CFG.HitNumbers.On = v
+end})
+VS_R:AddLabel("Color"):AddColorPicker("HitNumColor", {Default=Color3.fromRGB(255, 20, 147), Callback=function(v)
+    CFG.HitNumbers.Color = v
+end})
+VS_R:AddSlider("HitNumDur", {Text="Duration (s)", Default=5, Min=1, Max=10, Rounding=1, Callback=function(v)
+    CFG.HitNumbers.Duration = v
+end})
 
--- ═══════════════════════════════════════════
--- UI: TAB 7 — STATS
--- ═══════════════════════════════════════════
-local s_st_main   = tabs.stats:CreateSection("Live Statistics")
-local s_st_method = tabs.stats:CreateSection("Method Info")
+VS_E:AddToggle("ESPOn", {Text="Enable ESP", Default=false, Callback=function(v)
+    CFG.ESP.On = v
+    if not v then
+        for p, _ in pairs(espObjects) do removeESP(p) end
+    else
+        for _, p in ipairs(Players:GetPlayers()) do buildESP(p) end
+    end
+end})
+VS_E:AddToggle("ESPBox", {Text="Show Box", Default=true, Callback=function(v)
+    CFG.ESP.ShowBox = v
+end})
+VS_E:AddToggle("ESPName", {Text="Show Name", Default=true, Callback=function(v)
+    CFG.ESP.ShowName = v
+end})
+VS_E:AddToggle("ESPHealth", {Text="Show HP Bar", Default=true, Callback=function(v)
+    CFG.ESP.ShowHP = v
+end})
+VS_E:AddToggle("ESPDist", {Text="Show Distance", Default=false, Callback=function(v)
+    CFG.ESP.ShowDist = v
+end})
+VS_E:AddToggle("ESPTeam", {Text="Team Check", Default=true, Callback=function(v)
+    CFG.ESP.TeamCheck = v
+end})
+VS_E:AddSlider("ESPMaxDist", {Text="Max Distance", Default=500, Min=50, Max=2000, Rounding=0, Callback=function(v)
+    CFG.ESP.MaxDist = v
+end})
 
-local statLabels = {}
-statLabels.cycles      = s_st_main:CreateLabel("Void Cycles: 0")
-statLabels.kills       = s_st_main:CreateLabel("Kills: 0")
-statLabels.evaded      = s_st_main:CreateLabel("Projectiles Evaded: 0")
-statLabels.switches    = s_st_main:CreateLabel("Bypass Switches: 0")
-statLabels.bypassNow   = s_st_main:CreateLabel("Current Bypass: Adaptive")
-statLabels.method      = s_st_main:CreateLabel("Current Method: -")
-statLabels.active      = s_st_main:CreateLabel("Void Active: NO")
-statLabels.groundY     = s_st_main:CreateLabel("Ground Y: scanning...")
-statLabels.corrections = s_st_main:CreateLabel("Server Corrections: 0")
-statLabels.rbshots     = s_st_main:CreateLabel("Ragebot Shots: 0")
-statLabels.wbteles     = s_st_main:CreateLabel("Wall Bang Teleports: 0")
-statLabels.rbactive    = s_st_main:CreateLabel("Ragebot Active: NO")
-statLabels.rbtarget    = s_st_main:CreateLabel("Ragebot Target: None")
+VS_G:AddLabel("Makes YOUR character transparent locally")
+VS_G:AddLabel("Useful for hiding yourself visually")
+VS_G:AddToggle("GhostModeOn", {Text="Enable Ghost Mode", Default=false, Callback=function(v)
+    CFG.GhostMode.On = v
+    applyGhostMode(v)
+end})
+VS_G:AddSlider("GhostTransparency", {Text="Transparency %", Default=95, Min=0, Max=99, Rounding=0, Callback=function(v)
+    CFG.GhostMode.Transparency = v * 0.01
+    if CFG.GhostMode.On then applyGhostMode(true) end
+end})
 
-s_st_main:CreateButton("Reset Stats", function()
+-- ══════════════════════
+-- NOTIFIER TAB
+-- ══════════════════════
+local NT_L = Tabs.Notifier:AddLeftGroupbox("Kill Notifier")
+local NT_R = Tabs.Notifier:AddRightGroupbox("Anti Spectator")
+local NT_P = Tabs.Notifier:AddLeftGroupbox("Position Logger")
+local NT_A = Tabs.Notifier:AddRightGroupbox("AC Bypass Status")
+
+NT_L:AddToggle("KillNotifOn", {Text="Enable Kill Notifier", Default=true, Callback=function(v)
+    CFG.KillNotifier = v
+end})
+NT_L:AddToggle("KillSoundOn", {Text="Kill Sound", Default=true, Callback=function(v)
+    CFG.KillSound = v
+end})
+NT_L:AddButton({Text="Test Notification", Func=function()
+    Library:Notify("☠ Eliminated TestPlayer", 3)
+end})
+
+NT_R:AddLabel("Detects when camera subject changes")
+NT_R:AddLabel("Scrambles position if spectator detected")
+NT_R:AddToggle("AntiSpecOn", {Text="Enable Anti-Spectator", Default=false, Callback=function(v)
+    CFG.AntiSpec.On = v
+end})
+
+NT_P:AddLabel("Logs your void XYZ to console at intervals")
+NT_P:AddToggle("PosLogOn", {Text="Enable Position Logger", Default=false, Callback=function(v)
+    CFG.PosLogger.On = v
+end})
+NT_P:AddSlider("PosLogInterval", {Text="Interval (s)", Default=2, Min=1, Max=10, Rounding=0, Callback=function(v)
+    CFG.PosLogger.Interval = v
+end})
+
+NT_A:AddLabel("AC Bypass: ACTIVE ✓")
+NT_A:AddLabel("Method: AnalyticsPipelineController GC hook")
+NT_A:AddLabel("All matching functions replaced with infinite yield")
+NT_A:AddLabel("Applied at startup — always on")
+
+-- ══════════════════════
+-- STATS TAB
+-- ══════════════════════
+local ST_L = Tabs.Stats:AddLeftGroupbox("Live Statistics")
+local ST_R = Tabs.Stats:AddRightGroupbox("Method Info")
+
+local cyclesLabel     = ST_L:AddLabel("Void Cycles: 0")
+local killsLabel      = ST_L:AddLabel("Kills: 0")
+local evadedLabel     = ST_L:AddLabel("Projectiles Evaded: 0")
+local switchesLabel   = ST_L:AddLabel("Bypass Switches: 0")
+local bypassNowLabel  = ST_L:AddLabel("Current Bypass: Adaptive")
+local methodLabel     = ST_L:AddLabel("Current Method: -")
+local activeLabel     = ST_L:AddLabel("Void Active: NO")
+local groundYLabel    = ST_L:AddLabel("Ground Y: scanning...")
+local correctLabel    = ST_L:AddLabel("Server Corrections: 0")
+
+ST_L:AddButton({Text="Reset Stats", Func=function()
     CFG.Stats.CycleCount        = 0
     CFG.Stats.KillCount         = 0
     CFG.Stats.ProjectilesEvaded = 0
     CFG.Stats.BypassSwitches    = 0
-    CFG.Stats.RagebotShots      = 0
-    CFG.Stats.WallBangTeleports = 0
     VoidState.CorrectionCount   = 0
-    window:Notify("Stats", "All counters reset", 3)
-end)
+    Library:Notify("Stats reset", 2)
+end})
 
-s_st_method:CreateLabel("Wormhole: cyclic exit network")
-s_st_method:CreateLabel("Phantom: ghost layer cycling")
-s_st_method:CreateLabel("Supernova: compress then explode")
-s_st_method:CreateLabel("Mirror: reflection flip")
-s_st_method:CreateLabel("Pulse Wave: outward sine pulse")
-s_st_method:CreateLabel("Echo: delayed position replay")
-s_st_method:CreateLabel("Singularity: gravitational collapse")
-s_st_method:CreateLabel("Storm Cell: 5-cell orbital switching")
+ST_R:AddLabel("Wormhole: cyclic exit network")
+ST_R:AddLabel("Phantom: ghost layer cycling")
+ST_R:AddLabel("Supernova: compress then explode")
+ST_R:AddLabel("Mirror: reflection flip")
+ST_R:AddLabel("Pulse Wave: outward sine pulse")
+ST_R:AddLabel("Echo: delayed position replay")
+ST_R:AddLabel("Singularity: gravitational collapse")
+ST_R:AddLabel("Storm Cell: 5-cell orbital switching")
+ST_R:AddLabel("Chaos Mode: auto-cycles all 33 methods")
 
--- Stats update loop
 RunService.Heartbeat:Connect(function()
     pcall(function()
-        if not statLabels.cycles then return end
-        statLabels.cycles:UpdateText("Void Cycles: "       .. CFG.Stats.CycleCount)
-        statLabels.kills:UpdateText("Kills: "              .. CFG.Stats.KillCount)
-        statLabels.evaded:UpdateText("Projectiles Evaded: ".. CFG.Stats.ProjectilesEvaded)
-        statLabels.switches:UpdateText("Bypass Switches: " .. CFG.Stats.BypassSwitches)
-        statLabels.bypassNow:UpdateText("Current Bypass: "
+        cyclesLabel:SetText("Void Cycles: "        .. CFG.Stats.CycleCount)
+        killsLabel:SetText("Kills: "               .. CFG.Stats.KillCount)
+        evadedLabel:SetText("Projectiles Evaded: " .. CFG.Stats.ProjectilesEvaded)
+        switchesLabel:SetText("Bypass Switches: "  .. CFG.Stats.BypassSwitches)
+        bypassNowLabel:SetText("Current Bypass: "
             .. (CFG.Bypass.Mode == "Adaptive" and VoidState.AdaptiveMode or CFG.Bypass.Mode))
-        statLabels.method:UpdateText("Current Method: "    .. CFG.Void.Method)
-        statLabels.active:UpdateText("Void Active: "       .. (VoidState.Active and "YES ⚡" or "NO"))
-        statLabels.groundY:UpdateText("Ground Y: "         .. math.floor(VoidState.GroundY))
-        statLabels.corrections:UpdateText("Server Corrections: " .. VoidState.CorrectionCount)
-        statLabels.rbshots:UpdateText("Ragebot Shots: "    .. CFG.Stats.RagebotShots)
-        statLabels.wbteles:UpdateText("Wall Bang Teleports: " .. CFG.Stats.WallBangTeleports)
-        statLabels.rbactive:UpdateText("Ragebot Active: "  .. (RagebotState.active and "YES ⚡" or "NO"))
-        local targetName = "None"
-        if RagebotState.currentTarget then
-            local p = Players:GetPlayerFromCharacter(RagebotState.currentTarget)
-            if p then targetName = p.Name end
-        end
-        statLabels.rbtarget:UpdateText("Ragebot Target: " .. targetName)
+        methodLabel:SetText("Current Method: "     .. CFG.Void.Method)
+        activeLabel:SetText("Void Active: "        .. (VoidState.Active and "YES ⚡" or "NO"))
+        groundYLabel:SetText("Ground Y: "          .. math.floor(VoidState.GroundY))
+        correctLabel:SetText("Server Corrections: " .. VoidState.CorrectionCount)
     end)
 end)
 
--- ═══════════════════════════════════════════
--- UI: TAB 8 — SETTINGS
--- ═══════════════════════════════════════════
-local s_set_main = tabs.settings:CreateSection("General")
-local s_set_act  = tabs.settings:CreateSection("Quick Actions")
-local s_set_info = tabs.settings:CreateSection("Build Info")
+-- ══════════════════════
+-- SETTINGS TAB
+-- ══════════════════════
+local SET_L = Tabs.Settings:AddLeftGroupbox("Presets")
+local SET_R = Tabs.Settings:AddRightGroupbox("Quick Actions")
+local SET_I = Tabs.Settings:AddLeftGroupbox("Info")
 
-s_set_main:CreateLabel("Device: " .. (IsMobile and "MOBILE" or "PC")
-    .. (screenSize and (" (" .. screenSize .. ")") or ""))
-s_set_main:CreateLabel("UI Toggle: Insert (PC) / Library button (Mobile)")
-s_set_main:CreateDropdown("Change Font", stored_fonts, function(v)
-    window:SetFont(v)
-end, "", false)
+SET_L:AddLabel("── Preset 1: Max Rage ──")
+SET_L:AddLabel("Seizure + Triple Flicker + Bait + Full Evasion")
+SET_L:AddButton({Text="Apply Max Rage", Func=function()
+    applyPreset_MaxRage()
+end})
 
-s_set_act:CreateButton("⛔ Stop Void + Ragebot", function()
-    CFG.Void.On    = false
-    CFG.Ragebot.On = false
+SET_L:AddLabel(" ")
+SET_L:AddLabel("── Preset 2: Ghost Drift ──")
+SET_L:AddLabel("Drift + Ghost Mode + Clean CFrame + Silent")
+SET_L:AddButton({Text="Apply Ghost Drift", Func=function()
+    applyPreset_GhostDrift()
+end})
+
+SET_R:AddButton({Text="Stop All Features", Func=function()
+    CFG.Void.On = false
     stopVoid()
-    stopRagebot()
-    window:Notify("Stopped", "Void and Ragebot disabled", 3)
-end)
-
-s_set_act:CreateButton("🔄 Restart Void", function()
+    CFG.GhostMode.On = false
+    applyGhostMode(false)
+    CFG.ChaosMode.On = false
+    CFG.AntiSpec.On  = false
+    CFG.PosLogger.On = false
+    CFG.Crosshair.On = false
+    crosshairImg.ImageTransparency = 1
+    UIS.MouseIconEnabled = true
+    if fovCircle   then fovCircle.Visible   = false end
+    Library:Notify("All features stopped", 3)
+end})
+SET_R:AddButton({Text="Restart Void", Func=function()
     if CFG.Void.On then
-        stopVoid(); task.wait(0.1); startVoid()
-        window:Notify("Void Restarted", "New position initialized", 3)
+        stopVoid()
+        task.wait(0.1)
+        startVoid()
+        Library:Notify("Void restarted", 2)
     else
-        window:Notify("Void OFF", "Enable void first", 3)
+        Library:Notify("Enable Void first", 2)
     end
-end)
+end})
+SET_R:AddButton({Text="Unload UI", Func=function() Library:Unload() end})
+SET_R:AddButton({Text="Print Full Status", Func=function()
+    print("=== LOGIC ENHANCEMENT v4.0 STATUS ===")
+    print("Void Active:     ", VoidState.Active)
+    print("Void Method:     ", CFG.Void.Method)
+    print("Bypass Mode:     ", CFG.Bypass.Mode)
+    print("Adaptive Sub:    ", VoidState.AdaptiveMode)
+    print("Void X/Z:        ", math.floor(VoidState.X), math.floor(VoidState.Z))
+    print("Y Base:          ", math.floor(CFG.Void.YBase))
+    print("Ground Y:        ", VoidState.GroundY)
+    print("Desync:          ", CFG.Desync.On)
+    print("Bait Mode:       ", CFG.Desync.BaitMode)
+    print("Evasion:         ", CFG.Evade.On)
+    print("Ghost Mode:      ", CFG.GhostMode.On)
+    print("Chaos Mode:      ", CFG.ChaosMode.On)
+    print("Anti-Spec:       ", CFG.AntiSpec.On)
+    print("AC Bypass:       ACTIVE (AnalyticsPipelineController GC hook)")
+    print("Cycles:          ", CFG.Stats.CycleCount)
+    print("Kills:           ", CFG.Stats.KillCount)
+    print("Proj Evaded:     ", CFG.Stats.ProjectilesEvaded)
+    print("BP Switches:     ", CFG.Stats.BypassSwitches)
+    print("Server Corrects: ", VoidState.CorrectionCount)
+    Library:Notify("Status printed to console", 2)
+end})
 
-s_set_act:CreateButton("🎯 Best Ragebot Setup", function()
-    window:Notify("Best Ragebot Setup",
-        "Ragebot ON + Wall Bang ON + Void: Seizure + Adaptive bypass",
-        7)
-end)
+SET_I:AddLabel("Logic Enhancement v4.0")
+SET_I:AddLabel("LinoriaLib UI")
+SET_I:AddLabel("33 void methods")
+SET_I:AddLabel("Bypass Engine v4 — Adaptive")
+SET_I:AddLabel("AC: AnalyticsPipelineController GC hook")
+SET_I:AddLabel("Desync: bait + triple flicker")
+SET_I:AddLabel("Evasion: projectile detection")
+SET_I:AddLabel("ESP: box + name + HP + distance")
+SET_I:AddLabel("Ghost Mode: local transparency")
+SET_I:AddLabel("Chaos Mode: auto-rotate 33 methods")
+SET_I:AddLabel("Anti-Spec: position scramble on spec")
+SET_I:AddLabel("Position Logger: XYZ console output")
+SET_I:AddLabel("2 presets: Max Rage + Ghost Drift")
+SET_I:AddLabel("Device: " .. (IsMobile and "MOBILE" or "PC"))
 
-s_set_act:CreateButton("📋 Print Full Status", function()
-    print("=== RIVALS VOID PREMIUM v1.3 STATUS ===")
-    print("Void Active:      ", VoidState.Active)
-    print("Void Method:      ", CFG.Void.Method)
-    print("Bypass Mode:      ", CFG.Bypass.Mode)
-    print("Adaptive Sub:     ", VoidState.AdaptiveMode)
-    print("Void X/Z:         ", math.floor(VoidState.X), math.floor(VoidState.Z))
-    print("Y Base:           ", math.floor(CFG.Void.YBase))
-    print("Ground Y:         ", VoidState.GroundY)
-    print("Desync:           ", CFG.Desync.On)
-    print("Bait Mode:        ", CFG.Desync.BaitMode)
-    print("Evasion:          ", CFG.Evade.On)
-    print("Proj Detect:      ", CFG.Evade.ProjDetect)
-    print("Ragebot Active:   ", RagebotState.active)
-    print("Ragebot WallBang: ", CFG.Ragebot.WallBang)
-    print("AC Bypass:        ACTIVE")
-    print("Cycles:           ", CFG.Stats.CycleCount)
-    print("Kills:            ", CFG.Stats.KillCount)
-    print("Proj Evaded:      ", CFG.Stats.ProjectilesEvaded)
-    print("BP Switches:      ", CFG.Stats.BypassSwitches)
-    print("Ragebot Shots:    ", CFG.Stats.RagebotShots)
-    print("WB Teleports:     ", CFG.Stats.WallBangTeleports)
-    print("Server Corrects:  ", VoidState.CorrectionCount)
-    window:Notify("Status Printed", "Check F9 console", 3)
-end)
-
-s_set_act:CreateButton("🎯 Recommended Setup", function()
-    window:Notify("Best Full Setup",
-        "Void: Seizure | Bypass: Adaptive | Desync: ON | Triple Flicker | Ragebot: ON | Wall Bang: ON",
-        8)
-end)
-
-s_set_info:CreateLabel("Rivals Void Premium v1.3")
-s_set_info:CreateLabel("nfpw UI Library")
-s_set_info:CreateLabel("33 void methods")
-s_set_info:CreateLabel("Bypass engine v3 — Adaptive mode")
-s_set_info:CreateLabel("AC: MiscellaneousController hook")
-s_set_info:CreateLabel("Desync: bait mode + triple flicker")
-s_set_info:CreateLabel("Evasion: projectile detection")
-s_set_info:CreateLabel("Ragebot: UseItem remote + wall bang teleport")
-s_set_info:CreateLabel("Stats: void/kill/evasion/ragebot tracking")
-
-local config_manager = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/nfpw/XXSCRIPT/refs/heads/main/Library/ConfigManager.lua"
-))()
-config_manager:SetLibrary(library)
-config_manager:SetWindow(window)
-config_manager:SetFolder("RivalsVoidPremium_v13")
-config_manager:BuildConfigSection(tabs.settings)
-config_manager:LoadAutoloadConfig()
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+ThemeManager:SetFolder("LogicEnhancement_v4")
+SaveManager:SetFolder("LogicEnhancement_v4")
+SaveManager:BuildConfigSection(Tabs.Settings)
+ThemeManager:ApplyToTab(Tabs.Settings)
+SaveManager:LoadAutoloadConfig()
 
 -- ═══════════════════════════════════════════
 -- CHARACTER RESPAWN
@@ -1964,60 +1973,32 @@ LP.CharacterAdded:Connect(function(nc)
     VoidState.DesyncTimer     = 0
     VoidState.CorrectionCount = 0
 
-    -- Reset ragebot state
-    RagebotState.currentTarget = nil
-    RagebotState.wbActive      = false
-    RagebotState.wbOrigPos     = nil
-    if RagebotState.wbConn then
-        RagebotState.wbConn:Disconnect()
-        RagebotState.wbConn = nil
-    end
-
     task.wait(1.5)
-
     for _, p in ipairs(Players:GetPlayers()) do watchPlayer(p) end
 
-    if CFG.Void.On    then startVoid()    end
-    if CFG.Ragebot.On then startRagebot() end
+    if CFG.Void.On then startVoid() end
+    if CFG.GhostMode.On then
+        task.wait(0.5)
+        applyGhostMode(true)
+    end
 end)
 
 -- ═══════════════════════════════════════════
--- WATERMARK HUD
+-- CROSSHAIR RENDER
 -- ═══════════════════════════════════════════
-local watermark = library:Hud()
 RunService.RenderStepped:Connect(function()
-    local voidStr = (VoidState.Active and CFG.Void.On)
-        and ("⚡ " .. CFG.Void.Method
-            .. " | BP:" .. (CFG.Bypass.Mode == "Adaptive"
-                and VoidState.AdaptiveMode or CFG.Bypass.Mode))
-        or "VOID OFF"
-
-    local rbStr = CFG.Ragebot.On
-        and ("| RAGE" .. (CFG.Ragebot.WallBang and "+WB" or ""))
-        or ""
-
-    watermark:SetText(
-        "Rivals Void Premium v1.3 | "
-        .. voidStr .. " "
-        .. rbStr
-        .. "| " .. os.date("%H:%M:%S")
-    )
+    if CFG.Crosshair.On then
+        crosshairImg.Position = UDim2.new(0.5, 0, 0.5, 0)
+    end
 end)
 
 -- ═══════════════════════════════════════════
 -- LOAD NOTIFICATIONS
 -- ═══════════════════════════════════════════
-window:Notify("Rivals Void Premium v1.3",
-    "Ragebot + Wall Bang Teleport added. 33 methods. AC Bypass active.",
-    7)
+Library:Notify("Logic Enhancement v4.0 loaded — " .. (IsMobile and "MOBILE" or "PC"), 6)
+Library:Notify("2 presets ready in Settings: Max Rage + Ghost Drift", 5)
 
-task.wait(7)
-
-window:Notify("Recommended Setup",
-    "Void: Seizure | Bypass: Adaptive | Desync: ON | Ragebot: ON | Wall Bang: ON",
-    7)
-
-print("[RIVALS VOID PREMIUM v1.3] Loaded")
-print("AC Bypass: ACTIVE | Methods: 33 | Bypass Engine: v3 Adaptive")
-print("Ragebot: " .. (ragebotModsOk and "LOADED" or "FAILED — modules not found"))
-print("Device: " .. (IsMobile and "MOBILE" or "PC") .. (screenSize and (" | " .. screenSize) or ""))
+print("[LOGIC ENHANCEMENT v4.0] Loaded")
+print("AC Bypass: ACTIVE (AnalyticsPipelineController GC hook) | Methods: 33 | Bypass Engine: v4 Adaptive")
+print("Device: " .. (IsMobile and "MOBILE" or "PC"))
+print("New in v4: ESP | Ghost Mode | Chaos Mode | Anti-Spectator | Position Logger | 2 Presets")
