@@ -1,49 +1,27 @@
 --[[
-    LOGIC ENHANCEMENT v4.0 — LinoriaLib Edition
-    Void · Desync · Evasion · Bypass Engine v4
-    AC Bypass · 33 Methods · Kill Notifier
-    Mobile + PC compatible
+    ╔══════════════════════════════════════════════════════════╗
+    ║  RIVALS - Ultimate VoidSpam + Projectile TP             ║
+    ║  Improved: Ragebot persistence, Desync, New features    ║
+    ╚══════════════════════════════════════════════════════════╝
 ]]
-
--- ═══════════════════════════════════════════
--- AC BYPASS (from Rivals Tool v9.8)
--- ═══════════════════════════════════════════
-assert(hookmetamethod, "Your executor doesn't support hookmetamethod.")
 
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
 
-for i, v in getgc() do
-    if typeof(v) == "function" and string.find(debug.info(v, "s"), "AnalyticsPipelineController") then
-        hookfunction(v, function()
-            return task.wait(9e9)
-        end)
-    end
-end
+local cloneref = cloneref or function(obj) return obj end
 
--- ═══════════════════════════════════════════
--- SERVICES
--- ═══════════════════════════════════════════
-local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
-local UIS               = game:GetService("UserInputService")
-local Lighting          = game:GetService("Lighting")
-local Debris            = game:GetService("Debris")
-local TweenService      = game:GetService("TweenService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService       = game:GetService("HttpService")
+local Players           = cloneref(game:GetService("Players"))
+local RunService        = cloneref(game:GetService("RunService"))
+local Workspace         = cloneref(game:GetService("Workspace"))
+local ReplicatedStorage = cloneref(game:GetService("ReplicatedStorage"))
+local UserInputService  = cloneref(game:GetService("UserInputService"))
+local CollectionService = cloneref(game:GetService("CollectionService"))
+local StarterPlayer     = cloneref(game:GetService("StarterPlayer"))
+local TweenService      = cloneref(game:GetService("TweenService"))
 
-local LP       = Players.LocalPlayer
-local IsMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
-local camera   = workspace.CurrentCamera
-
--- ═══════════════════════════════════════════
--- CHARACTER
--- ═══════════════════════════════════════════
-local character        = LP.Character or LP.CharacterAdded:Wait()
-local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-local humanoid         = character:WaitForChild("Humanoid")
+local LocalPlayer = Players.LocalPlayer
+local IsMobile    = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
 -- ═══════════════════════════════════════════
 -- LINORIA LIBRARY
@@ -53,10 +31,28 @@ local Library      = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local SaveManager  = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
+if Library and Library.GetMouse then
+    Library.GetMouse = function()
+        return {
+            X       = UserInputService:GetMouseLocation().X,
+            Y       = UserInputService:GetMouseLocation().Y,
+            Hit     = Workspace.CurrentCamera.CFrame * CFrame.new(0, 0, -10),
+            Target  = nil,
+            UnitRay = Workspace.CurrentCamera:ViewportPointToRay(
+                UserInputService:GetMouseLocation().X,
+                UserInputService:GetMouseLocation().Y
+            )
+        }
+    end
+end
+
 Library.ShowToggleFrameInKeybinds = true
 
+-- ═══════════════════════════════════════════
+-- WINDOW
+-- ═══════════════════════════════════════════
 local Window = Library:CreateWindow({
-    Title                = "Logic Enhancement v4.0",
+    Title                = "Rivals Tool",
     Center               = true,
     AutoShow             = true,
     Resizable            = true,
@@ -65,1940 +61,1635 @@ local Window = Library:CreateWindow({
     NotifySide           = "Left",
     TabPadding           = 8,
     MenuFadeTime         = 0.2,
-    Size                 = UDim2.fromOffset(520, 580),
+    Size                 = UDim2.fromOffset(480, 560),
 })
 
 local Tabs = {
-    Void     = Window:AddTab("Void"),
-    Bypass   = Window:AddTab("Bypass"),
-    Desync   = Window:AddTab("Desync"),
-    Evasion  = Window:AddTab("Evasion"),
-    Visuals  = Window:AddTab("Visuals"),
-    Notifier = Window:AddTab("Notifier"),
-    Stats    = Window:AddTab("Stats"),
-    Settings = Window:AddTab("Settings"),
+    VoidSpam     = Window:AddTab("Void Spam"),
+    ProjectileTP = Window:AddTab("Projectile TP"),
+    Ragebot      = Window:AddTab("Ragebot"),
+    Weapons      = Window:AddTab("Weapons"),
+    Effects      = Window:AddTab("Effects"),
+    Misc         = Window:AddTab("Misc"),
+    Settings     = Window:AddTab("Settings"),
 }
 
 -- ═══════════════════════════════════════════
--- CONFIG
+-- CONFIGURATION
 -- ═══════════════════════════════════════════
-local CFG = {
-    Void = {
-        On           = false,
-        Method       = "Quantum Tunneling",
-        YBase        = 1e10 + (math.random() * 10e9 - 5e9) + 7369123,
-        DriftSpeed   = 9e6,
-        DriftChaos   = 0.98,
-        YDriftSpeed  = 4e6,
-        YDriftRange  = 2e9,
-        Scramble     = true,
+local Config = {
+    VoidSpam = {
+        Enabled    = false,
+        Method     = "Extreme Desync",
+        Altitude   = 100000,
+        Intensity  = 100,
     },
-
-    Bypass = {
-        Mode                = "Adaptive",
-        AdaptiveSensitivity = 0.7,
-        NetworkPulse        = true,
-        PulseRate           = 8,
-        PulseStrength       = 2e7,
-        AntiCorrect         = true,
-        AntiCorrectStr      = 3,
-        MultiWrite          = false,
-        MultiWriteCount     = 3,
-        Momentum            = false,
-        MomentumDecay       = 0.85,
-        Jitter              = true,
-        JitterScale         = 50,
+    PureDesync = {
+        Enabled = false,
     },
-
-    Evade = {
-        On         = true,
-        Radius     = 8e9,
-        Speed      = 6e9,
-        Cooldown   = 0.05,
-        Vertical   = 3e9,
-        VertBias   = 0.5,
-        ForceUp    = false,
-        ProjDetect = true,
-        ProjRange  = 500,
-        ProjSpeed  = 80,
+    -- NEW: Pulse Desync — alternates between void and real position
+    -- on a tight interval to maximize server confusion while keeping
+    -- projectile hit registration reliable
+    PulseDesync = {
+        Enabled      = false,
+        HideTime     = 0.25,   -- seconds at void position (server thinks you're gone)
+        AttackTime   = 0.1,    -- seconds at real position (shoot window)
+        VoidAltitude = 150000,
     },
-
-    Desync = {
-        On            = true,
-        Tick          = 0.18,
-        Radius        = 22,
-        WanderSpeed   = 3.5,
-        WanderChaos   = 0.4,
-        TripleFlicker = false,
-        BaitMode      = false,
-        BaitOffset    = 15,
+    WeaponTracker = {
+        Enabled       = false,
+        VoidAltitude  = 200000,
+        TeleportDelay = 0.1,
+        TeamCheck     = true,
     },
-
-    -- Visuals
-    Crosshair = {
-        On    = false,
-        Size  = 24,
-        Image = "rbxassetid://97119437608195",
+    ProjectileTP = {
+        Enabled       = false,
+        AutoShoot     = false,
+        TargetPart    = "HitBoxHeadSmall",
+        LoopDelay     = 0.01,
+        Cache         = true,
+        -- NEW from image:
+        ShootAttempts = 1,     -- how many times to firetouchinterest per projectile
+        Priority      = "Closest", -- targeting priority
+        TeamCheck     = true,
+        VisCheck      = false,
+        MaxDistance   = 999,
+        HitboxSize    = 5,     -- virtual hitbox expansion radius
     },
-    HitNumbers = {
-        On       = true,
-        Color    = Color3.fromRGB(255, 20, 147),
-        Duration = 5,
+    -- NEW: Ragebot with hide/attack timing (from image)
+    Ragebot = {
+        Enabled        = false,
+        VoidSpamSync   = true,    -- sync with void spam hide/attack timing
+        HideTime       = 0.25,    -- match PulseDesync
+        AttackTime     = 0.1,
+        ShootAttempts  = 1,
+        OrbitRadius    = 5,
+        OrbitSpeed     = 10,
+        ClientTP       = true,
+        PersistAcrossRounds = true, -- RE-ENABLE after round transitions
     },
-    ESP = {
-        On        = false,
-        ShowBox   = true,
-        ShowName  = true,
-        ShowHP    = true,
-        ShowDist  = false,
-        TeamCheck = true,
-        MaxDist   = 500,
+    Weapons = {
+        ReloadSpeedEnabled = false,
+        ReloadLength       = 0,
+        Whitelist          = {"Bow", "Daggers", "Slingshot"},
     },
-
-    -- Ghost mode: makes your character locally invisible
-    GhostMode = {
-        On          = false,
-        Transparency = 0.95,
+    RakNet = {
+        Enabled = false,
     },
-
-    -- Chaos mode: rapidly randomize void method automatically
-    ChaosMode = {
-        On       = false,
-        Interval = 0.8,
+    AutoCollect = {
+        Enabled       = false,
+        CollectHealth = true,
+        CollectAmmo   = true,
     },
-
-    -- Position logger: logs your void coordinates to console
-    PosLogger = {
-        On       = false,
-        Interval = 2,
+    AntiOOB = {
+        Enabled      = false,
+        SpoofRemote  = true,
+        PatchModule  = true,
+        HideOOBParts = false,
     },
-
-    -- Anti spectator: detects if someone is spectating you
-    AntiSpec = {
-        On = false,
+    ExplosionEffect = {
+        Enabled        = false,
+        OnDeath        = true,
+        OnKill         = true,
+        OnHit          = false,
+        Size           = 24,
+        SpeedVariance  = 0.2,
+        LoopExplosions = false,
+        LoopInterval   = 0.5,
     },
-
-    KillNotifier = true,
-    KillSound    = true,
-
-    SeizureSpeed    = 50,
-    HyperdriveSpeed = 20,
-    GlitchLayers    = 5,
-    RiftPhase       = 3,
-    WormholeCount   = 6,
-    PhantomLayers   = 4,
-    StormRadius     = 5e11,
-    CollapseSpeed   = 8,
-    EchoDelay       = 0.05,
-    MirrorAxes      = true,
-    PulseWaveFreq   = 7,
-    NovaExplosions  = 3,
-    LissajousA      = 2,
-    LissajousB      = 3,
-    GravityStr      = 1e8,
-    FlickerInterval = 0.05,
-
-    Stats = {
-        CycleCount        = 0,
-        BypassSwitches    = 0,
-        ProjectilesEvaded = 0,
-        KillCount         = 0,
+    TracerEffect = {
+        Enabled      = false,
+        OnShoot      = true,
+        TraceToEnemy = false,
+        Color        = Color3.fromRGB(255, 50, 50),
+        Width        = 0.05,
+        Duration     = 0.3,
+    },
+    AnimationSpoof = {
+        Enabled = false,
+        AnimId  = "",
+        Looped  = false,
+        Speed   = 1,
+    },
+    MobileCtrl = {
+        ForceEnableMobile    = false,
+        DisableMobilePrompts = false,
+    },
+    Safety = {
+        AutoDisableOnDeath = true,
+        EmergencyKey       = Enum.KeyCode.Delete,
     },
 }
 
 -- ═══════════════════════════════════════════
--- HELPERS
+-- VARIABLES
 -- ═══════════════════════════════════════════
-local function clamp(x, a, b) return x < a and a or x > b and b or x end
-local function getHRP()  local c = LP.Character; return c and c:FindFirstChild("HumanoidRootPart") end
-local function getHum()  local c = LP.Character; return c and c:FindFirstChildOfClass("Humanoid") end
-local function randSign() return math.random() > 0.5 and 1 or -1 end
-local function lerp(a, b, t) return a + (b - a) * t end
+local hrp
+local clientCFrame
+local clientVelocity
+local clientAngularVelocity
+local Connections     = {}
+local ProjectileCache = {}
+local EnemyCache      = {}
 
-local function isSameTeam(p)
-    local same = false
-    pcall(function()
-        local myID    = LP:GetAttribute("TeamID")
-        local theirID = p:GetAttribute("TeamID")
-        if myID and theirID then same = (myID == theirID) end
+local pureHrp
+local pureClientC
+local pureClientV
+local pureClientVA
+
+-- Pulse Desync state
+local pulseHrp         = nil
+local pulseRealCF      = nil
+local pulseRealV       = nil
+local pulseRealVA      = nil
+local pulsePhase       = "attack" -- "hide" or "attack"
+local pulseNextSwitch  = 0
+local pulseTask        = nil
+
+-- Weapon Tracker
+local wtShootingPlayers = {}
+local wtEnemyShooting   = false
+local wtLastShooter     = nil
+local wtVoidActive      = false
+local wtTeleportTask    = nil
+local wtHookActive      = false
+
+-- Ragebot persistence
+local ragebotWasEnabled      = false
+local ragebotPersistConn     = nil
+local ragebotPhase           = "attack" -- "hide" or "attack"
+local ragebotNextSwitch      = 0
+local ragebotShootCount      = 0
+local ragebotCurrentTarget   = nil
+
+-- Anti OOB
+local antiOOBHookRef       = nil
+local antiOOBHookActive    = false
+local antiOOBModulePatched = false
+local antiOOBConnections   = {}
+
+-- Effects
+local ExplosionEffectFn  = nil
+local TracerEffectModule = nil
+local PlayAnimFn         = nil
+local MobileController   = nil
+local Utility            = nil
+local BetterDebris       = nil
+
+local loopExplosionTask  = nil
+local activeAnimTrack    = nil
+local tracerConnections  = {}
+local explosionDeathConnections = {}
+
+-- ═══════════════════════════════════════════
+-- LOAD EFFECT MODULES
+-- ═══════════════════════════════════════════
+local function safeRequire(path)
+    local ok, result = pcall(require, path)
+    if ok then return result end
+    return nil
+end
+
+pcall(function()
+    Utility      = safeRequire(ReplicatedStorage.Modules.Utility)
+    BetterDebris = safeRequire(ReplicatedStorage.Modules.BetterDebris)
+end)
+pcall(function()
+    local fn = safeRequire(LocalPlayer.PlayerScripts.Modules.Functions:WaitForChild("ExplosionEffect"))
+    if fn and typeof(fn) == "function" then ExplosionEffectFn = fn end
+end)
+pcall(function()
+    local mod = safeRequire(LocalPlayer.PlayerScripts.Modules:WaitForChild("TracerEffect"))
+    if mod then TracerEffectModule = mod end
+end)
+pcall(function()
+    local fn = safeRequire(LocalPlayer.PlayerScripts.Modules.Functions:WaitForChild("PlayPreloadedAnimation"))
+    if fn and typeof(fn) == "function" then PlayAnimFn = fn end
+end)
+pcall(function()
+    MobileController = safeRequire(LocalPlayer.PlayerScripts.Controllers:WaitForChild("MobileController"))
+end)
+
+-- ═══════════════════════════════════════════
+-- UTILITY
+-- ═══════════════════════════════════════════
+local function betterRandom(min, max, deadMin, deadMax)
+    local val = math.random(min, max)
+    repeat val = math.random(min, max)
+    until val < deadMin or val > deadMax
+    return val
+end
+
+local function IsAlive(player)
+    if not player or not player.Character then return false end
+    local hum = player.Character:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health > 0
+end
+
+local function isSameTeam(player)
+    local ok1, myTeam    = pcall(function() return LocalPlayer:GetAttribute("TeamID") end)
+    local ok2, theirTeam = pcall(function() return player:GetAttribute("TeamID") end)
+    if ok1 and ok2 and myTeam ~= nil and theirTeam ~= nil then return myTeam == theirTeam end
+    return LocalPlayer.Team ~= nil and player.Team ~= nil and LocalPlayer.Team == player.Team
+end
+
+local function isVisibleFrom(origin, targetPart)
+    if not targetPart then return false end
+    local ok, r = pcall(function()
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances = {LocalPlayer.Character, targetPart.Parent}
+        local hit = Workspace:Raycast(origin, targetPart.Position - origin, params)
+        return hit == nil or hit.Instance:IsDescendantOf(targetPart.Parent)
     end)
-    if not same then
-        pcall(function()
-            same = p.Team ~= nil and LP.Team ~= nil and p.Team == LP.Team
+    return ok and r or false
+end
+
+local function GetClosestEnemy()
+    local closest, closestDist = nil, math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and IsAlive(player) then
+            if Config.ProjectileTP.TeamCheck and isSameTeam(player) then continue end
+            local root   = player.Character:FindFirstChild("HumanoidRootPart")
+            local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if root and myRoot then
+                local dist = (myRoot.Position - root.Position).Magnitude
+                if dist < closestDist and dist <= Config.ProjectileTP.MaxDistance then
+                    if Config.ProjectileTP.VisCheck then
+                        if not isVisibleFrom(myRoot.Position, root) then continue end
+                    end
+                    closest     = player
+                    closestDist = dist
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function GetEnemiesSorted()
+    local list = {}
+    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and IsAlive(player) then
+            if Config.ProjectileTP.TeamCheck and isSameTeam(player) then continue end
+            local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+            if root and myRoot then
+                local dist = (myRoot.Position - root.Position).Magnitude
+                if dist <= Config.ProjectileTP.MaxDistance then
+                    if Config.ProjectileTP.VisCheck then
+                        if not isVisibleFrom(myRoot.Position, root) then continue end
+                    end
+                    table.insert(list, {player = player, dist = dist})
+                end
+            end
+        end
+    end
+
+    local priority = Config.ProjectileTP.Priority
+    if priority == "Closest" then
+        table.sort(list, function(a, b) return a.dist < b.dist end)
+    elseif priority == "Furthest" then
+        table.sort(list, function(a, b) return a.dist > b.dist end)
+    elseif priority == "Random" then
+        for i = #list, 2, -1 do
+            local j = math.random(i)
+            list[i], list[j] = list[j], list[i]
+        end
+    elseif priority == "Lowest HP" then
+        table.sort(list, function(a, b)
+            local ha = a.player.Character:FindFirstChildOfClass("Humanoid")
+            local hb = b.player.Character:FindFirstChildOfClass("Humanoid")
+            return (ha and ha.Health or 0) < (hb and hb.Health or 0)
+        end)
+    elseif priority == "Highest HP" then
+        table.sort(list, function(a, b)
+            local ha = a.player.Character:FindFirstChildOfClass("Humanoid")
+            local hb = b.player.Character:FindFirstChildOfClass("Humanoid")
+            return (ha and ha.Health or 0) > (hb and hb.Health or 0)
         end)
     end
-    return same
+
+    local result = {}
+    for _, entry in ipairs(list) do table.insert(result, entry.player) end
+    return result
+end
+
+local function CacheEnemies()
+    EnemyCache = GetEnemiesSorted()
 end
 
 -- ═══════════════════════════════════════════
--- VOID STATE
+-- VOID METHODS
 -- ═══════════════════════════════════════════
-local VoidState = {
-    X = (math.random() - 0.5) * 2e8,
-    Z = (math.random() - 0.5) * 2e8,
-    YOffset = 0, YDir = 1,
-    DirX = math.random() * 2 - 1,
-    DirZ = math.random() * 2 - 1,
-    IntendedPos = Vector3.zero,
+local VoidMethods = {}
 
-    Elapsed       = 0,
-    EvadeCooldown = 0,
-    DesyncTimer   = 0,
-
-    SpoofAngle    = math.random() * math.pi * 2,
-    SpoofDir      = (math.random() > 0.5) and 1 or -1,
-    SpoofBaseX    = 0,
-    SpoofBaseZ    = 0,
-    FakeGroundPos = Vector3.zero,
-    GroundY       = 0,
-    GroundUpdateT = 0,
-
-    LastPos          = Vector3.zero,
-    LastWrittenPos   = Vector3.zero,
-    Momentum         = Vector3.zero,
-    AdaptiveMode     = "Extreme Networking",
-    AdaptiveTimer    = 0,
-    CorrectionCount  = 0,
-
-    SeizureIndex  = 0,
-    SeizureTimer  = 0,
-    SeizurePool   = {},
-    GlitchTimer   = 0,
-    EchoHistory   = {},
-    EchoIndex     = 1,
-    WormholePhase = 0,
-    PhantomPhase  = 0,
-    NovaTimer     = 0,
-    NovaActive    = false,
-    NovaPos       = Vector3.zero,
-
-    InFlicker = false,
-    Active    = false,
-    Conn      = nil,
-
-    -- Chaos mode
-    ChaosTimer  = 0,
-    -- Pos logger
-    LogTimer    = 0,
-    -- Anti spec
-    SpecWatched = {},
-}
-
--- ═══════════════════════════════════════════
--- SEIZURE POOL
--- ═══════════════════════════════════════════
-local function refreshSeizurePool()
-    VoidState.SeizurePool = {}
-    for _ = 1, 64 do
-        table.insert(VoidState.SeizurePool, Vector3.new(
-            VoidState.X + (math.random() - 0.5) * 6e11,
-            CFG.Void.YBase + (math.random() - 0.5) * 2e10,
-            VoidState.Z + (math.random() - 0.5) * 6e11
-        ))
-    end
+VoidMethods["Extreme Desync"] = function()
+    local intensity = Config.VoidSpam.Intensity / 100
+    local range     = 2147483646 * intensity
+    local deadZone  = 1147483646 * intensity
+    hrp.CFrame = CFrame.new(
+        betterRandom(-range, range, -deadZone, deadZone),
+        betterRandom(-range, range, -deadZone, deadZone),
+        betterRandom(-range, range, -deadZone, deadZone)
+    ) * CFrame.Angles(math.rad(math.pi), math.rad(math.pi), math.rad(math.pi))
+    hrp.AssemblyLinearVelocity = Vector3.new(
+        betterRandom(-range, range, -deadZone, deadZone),
+        betterRandom(-range, range, -deadZone, deadZone),
+        betterRandom(-range, range, -deadZone, deadZone)
+    )
+    hrp.AssemblyAngularVelocity = Vector3.new(
+        betterRandom(-range, range, -deadZone, deadZone),
+        betterRandom(-range, range, -deadZone, deadZone),
+        betterRandom(-range, range, -deadZone, deadZone)
+    )
 end
 
-local function initEchoHistory()
-    VoidState.EchoHistory = {}
-    VoidState.EchoIndex   = 1
-    for _ = 1, 30 do
-        table.insert(VoidState.EchoHistory, Vector3.new(
-            VoidState.X, CFG.Void.YBase, VoidState.Z
-        ))
-    end
+VoidMethods["Projectile TP"] = function()
+    local altitude   = Config.VoidSpam.Altitude
+    local currentPos = clientCFrame.Position
+    hrp.CFrame = CFrame.new(
+        currentPos.X + math.random(-100, 100),
+        altitude,
+        currentPos.Z + math.random(-100, 100)
+    )
+    hrp.AssemblyLinearVelocity  = Vector3.new(0, 0, 0)
+    hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+end
+
+VoidMethods["Orbital Void"] = function()
+    local altitude = Config.VoidSpam.Altitude
+    local t = tick(); local radius = 50
+    hrp.CFrame = CFrame.new(math.sin(t*2)*radius, altitude, math.cos(t*2)*radius)
+    hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+end
+
+VoidMethods["Controlled Void"] = function()
+    local altitude = Config.VoidSpam.Altitude
+    hrp.CFrame = CFrame.new(
+        betterRandom(-1000,1000,-500,500), altitude, betterRandom(-1000,1000,-500,500)
+    )
+    hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+end
+
+VoidMethods["Seizure Mode"] = function()
+    local positions = {
+        Vector3.new(100000,100000,100000), Vector3.new(-100000,100000,-100000),
+        Vector3.new(100000,-100000,100000), Vector3.new(-100000,-100000,-100000),
+    }
+    local index = math.floor(tick()*10) % #positions + 1
+    hrp.CFrame = CFrame.new(positions[index])
+    hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
 end
 
 -- ═══════════════════════════════════════════
--- FRACTAL DRIFT DIRECTION
+-- PURE DESYNC
 -- ═══════════════════════════════════════════
-local function computeDriftDir(t)
-    local nx, nz, amp, freq = 0, 0, 1, 0.0001
-    for _ = 1, 4 do
-        nx   = nx + math.noise(t * freq, 0) * amp
-        nz   = nz + math.noise(0, t * freq) * amp
-        freq = freq * 2.37
-        amp  = amp  * 0.5
+Connections.PureDesyncHeartbeat = RunService.Heartbeat:Connect(function()
+    if not Config.PureDesync.Enabled then return end
+    pcall(function()
+        pureHrp      = LocalPlayer.Character.HumanoidRootPart
+        pureClientC  = pureHrp.CFrame
+        pureClientV  = pureHrp.AssemblyLinearVelocity
+        pureClientVA = pureHrp.AssemblyAngularVelocity
+        pureHrp.CFrame = CFrame.new(
+            betterRandom(-2147483646,2147483646,-1147483646,1147483646),
+            betterRandom(-2147483646,2147483646,-1147483646,1147483646),
+            betterRandom(-2147483646,2147483646,-1147483646,1147483646)
+        ) * CFrame.Angles(math.rad(math.pi),math.rad(math.pi),math.rad(math.pi))
+        pureHrp.AssemblyLinearVelocity = Vector3.new(
+            betterRandom(-2147483646,2147483646,-1147483646,1147483646),
+            betterRandom(-2147483646,2147483646,-1147483646,1147483646),
+            betterRandom(-2147483646,2147483646,-1147483646,1147483646)
+        )
+        pureHrp.AssemblyAngularVelocity = Vector3.new(
+            betterRandom(-2147483646,2147483646,-1147483646,1147483646),
+            betterRandom(-2147483646,2147483646,-1147483646,1147483646),
+            betterRandom(-2147483646,2147483646,-1147483646,1147483646)
+        )
+    end)
+end)
+
+RunService:BindToRenderStep("PureDesyncRestore", Enum.RenderPriority.First.Value, function()
+    if pureHrp and Config.PureDesync.Enabled then
+        pcall(function()
+            pureHrp.CFrame                  = pureClientC
+            pureHrp.AssemblyLinearVelocity  = pureClientV
+            pureHrp.AssemblyAngularVelocity = pureClientVA
+        end)
     end
-    local sp = t * 0.00073
-    nx = nx + math.noise(sp + 13.7, 7.3)  * 0.3
-    nz = nz + math.noise(sp + 31.1, 17.9) * 0.3
-    local cp = t * 0.00213
-    nx = nx + math.sin(cp) * math.cos(cp * 1.618) * 0.2
-    nz = nz + math.cos(cp * 0.618) * math.sin(cp * 2.718) * 0.2
-    local len = math.sqrt(nx * nx + nz * nz)
-    if len < 0.001 then
-        local a = t * math.pi * 0.1
-        return math.cos(a), math.sin(a)
-    end
-    return nx / len, nz / len
-end
+end)
 
 -- ═══════════════════════════════════════════
--- ALL 33 VOID METHODS
+-- PULSE DESYNC (NEW)
+-- Alternates between void position (hide phase)
+-- and real position (attack phase) on a timer
+-- Best used with Projectile TP — hide from server
+-- then fire during attack window
 -- ═══════════════════════════════════════════
-local allMethods = {
-    "Stable","Drift","Chaotic","Circle","Spiral","Lissajous","Perlin Noise",
-    "Flicker","Gravity Well","Helix","Figure 8","Tornado","Butterfly",
-    "Double Helix","Chaotic Sphere","Quantum Tunneling","Fractal Desync",
-    "Extreme Desync","Quantum Oscillation","Frame Skip",
-    "Seizure","Hyperdrive","Schrodinger","Glitch Storm","Dimensional Rift",
-    "Wormhole","Phantom","Supernova","Mirror","Pulse Wave",
-    "Echo","Singularity","Storm Cell",
-}
+local function startPulseDesync()
+    if pulseTask then task.cancel(pulseTask); pulseTask = nil end
 
-local function computeVoidPosition(dt)
-    local t  = VoidState.Elapsed
-    local bY = CFG.Void.YBase + VoidState.YOffset
-    local m  = CFG.Void.Method
+    pulseTask = task.spawn(function()
+        while Config.PulseDesync.Enabled do
+            local char = LocalPlayer.Character
+            if char then
+                local root = char:FindFirstChild("HumanoidRootPart")
+                if root then
+                    pulseHrp    = root
+                    pulseRealCF = root.CFrame
+                    pulseRealV  = root.AssemblyLinearVelocity
+                    pulseRealVA = root.AssemblyAngularVelocity
 
-    if m == "Stable" then
-        return Vector3.new(VoidState.X, bY, VoidState.Z)
+                    -- HIDE PHASE: send to void altitude
+                    pulsePhase = "hide"
+                    root.CFrame = CFrame.new(
+                        pulseRealCF.Position.X + math.random(-50, 50),
+                        Config.PulseDesync.VoidAltitude,
+                        pulseRealCF.Position.Z + math.random(-50, 50)
+                    )
+                    root.AssemblyLinearVelocity  = Vector3.new(0, 0, 0)
+                    root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 
-    elseif m == "Drift" then
-        local dx, dz = computeDriftDir(t)
-        VoidState.DirX    = VoidState.DirX + (dx - VoidState.DirX) * CFG.Void.DriftChaos * dt * 10
-        VoidState.DirZ    = VoidState.DirZ + (dz - VoidState.DirZ) * CFG.Void.DriftChaos * dt * 10
-        VoidState.X       = VoidState.X + VoidState.DirX * CFG.Void.DriftSpeed * dt
-        VoidState.Z       = VoidState.Z + VoidState.DirZ * CFG.Void.DriftSpeed * dt
-        VoidState.YOffset = VoidState.YOffset + VoidState.YDir * CFG.Void.YDriftSpeed * dt
-        if math.abs(VoidState.YOffset) >= CFG.Void.YDriftRange then VoidState.YDir = -VoidState.YDir end
-        return Vector3.new(VoidState.X, CFG.Void.YBase + VoidState.YOffset, VoidState.Z)
+                    task.wait(Config.PulseDesync.HideTime)
 
-    elseif m == "Chaotic" then
-        VoidState.X       = VoidState.X + (math.random()-0.5) * CFG.Void.DriftSpeed * dt * 5
-        VoidState.Z       = VoidState.Z + (math.random()-0.5) * CFG.Void.DriftSpeed * dt * 5
-        VoidState.YOffset = VoidState.YOffset + (math.random()-0.5) * CFG.Void.YDriftSpeed * dt * 5
-        return Vector3.new(VoidState.X, CFG.Void.YBase + VoidState.YOffset, VoidState.Z)
+                    -- ATTACK PHASE: restore real position (shoot window)
+                    pulsePhase = "attack"
+                    if pulseHrp and pulseHrp.Parent then
+                        pcall(function()
+                            pulseHrp.CFrame                  = pulseRealCF
+                            pulseHrp.AssemblyLinearVelocity  = pulseRealV
+                            pulseHrp.AssemblyAngularVelocity = pulseRealVA
+                        end)
+                    end
 
-    elseif m == "Circle" then
-        local r = 1e9
-        return Vector3.new(VoidState.X+math.cos(t*2)*r, bY, VoidState.Z+math.sin(t*2)*r)
+                    task.wait(Config.PulseDesync.AttackTime)
+                end
+            end
 
-    elseif m == "Spiral" then
-        local r = 1e9 * (1 + math.sin(t))
-        return Vector3.new(VoidState.X+math.cos(t*3)*r, bY, VoidState.Z+math.sin(t*3)*r)
-
-    elseif m == "Lissajous" then
-        local r = 2e9
-        return Vector3.new(
-            VoidState.X + math.sin(t*CFG.LissajousA)*r, bY,
-            VoidState.Z + math.sin(t*CFG.LissajousB)*r
-        )
-
-    elseif m == "Perlin Noise" then
-        local nt = t * 0.1
-        return Vector3.new(
-            VoidState.X + math.noise(nt,0)*5e9, bY,
-            VoidState.Z + math.noise(0,nt)*5e9
-        )
-
-    elseif m == "Flicker" then
-        local flip = (tick() % (CFG.FlickerInterval*2) < CFG.FlickerInterval)
-        return flip
-            and Vector3.new(VoidState.X, CFG.Void.YBase, VoidState.Z)
-            or  Vector3.new(-VoidState.X, CFG.Void.YBase+1e9, -VoidState.Z)
-
-    elseif m == "Gravity Well" then
-        local gt = t * 0.5; local r = CFG.GravityStr * (1 + math.sin(gt))
-        return Vector3.new(
-            VoidState.X + math.cos(gt)*r,
-            bY + math.sin(gt*0.7)*r,
-            VoidState.Z + math.sin(gt)*r
-        )
-
-    elseif m == "Helix" then
-        local r = 1e9; local ht = t * 2
-        return Vector3.new(
-            VoidState.X + math.cos(ht)*r,
-            bY + math.sin(ht*0.5)*r,
-            VoidState.Z + math.sin(ht)*r
-        )
-
-    elseif m == "Figure 8" then
-        local r = 1.5e9; local ft = t * 1.5
-        return Vector3.new(
-            VoidState.X + math.sin(ft)*r, bY,
-            VoidState.Z + math.sin(ft)*math.cos(ft)*r
-        )
-
-    elseif m == "Tornado" then
-        local r = 2e9 * math.abs(math.sin(t)); local tt = t * 5
-        return Vector3.new(
-            VoidState.X + math.cos(tt)*r,
-            bY + math.sin(t*2)*1e9,
-            VoidState.Z + math.sin(tt)*r
-        )
-
-    elseif m == "Butterfly" then
-        local r = (math.exp(math.sin(t)) - 2*math.cos(4*t) + math.sin((2*t-math.pi)/24)^5) * 5e8
-        return Vector3.new(
-            VoidState.X + math.sin(t)*r,
-            bY + math.cos(t)*r,
-            VoidState.Z + math.sin(t*0.5)*r
-        )
-
-    elseif m == "Double Helix" then
-        local r = 1e9; local dht = t*3
-        local off = (tick()%1 < 0.5) and 1 or -1
-        return Vector3.new(
-            VoidState.X + math.cos(dht)*r*off,
-            bY + math.sin(dht)*5e8,
-            VoidState.Z + math.sin(dht)*r*off
-        )
-
-    elseif m == "Chaotic Sphere" then
-        local r = 2e9; local t1 = t*2; local t2 = t*1.3
-        return Vector3.new(
-            VoidState.X + math.sin(t1)*math.cos(t2)*r,
-            bY + math.sin(t1)*math.sin(t2)*r,
-            VoidState.Z + math.cos(t1)*r
-        )
-
-    elseif m == "Quantum Tunneling" then
-        local r = 1e11 * randSign()
-        local j = Vector3.new(
-            (math.random()-0.5)*2e9,
-            (math.random()-0.5)*2e8,
-            (math.random()-0.5)*2e9
-        )
-        return Vector3.new(VoidState.X+r, bY+j.Y, VoidState.Z+r) + j
-
-    elseif m == "Fractal Desync" then
-        local ft = t*5
-        local x = math.sin(ft) + math.sin(ft*2.1)/2 + math.sin(ft*3.2)/4
-        local z = math.cos(ft) + math.cos(ft*2.2)/2 + math.cos(ft*3.1)/4
-        return Vector3.new(
-            VoidState.X + x*1e10,
-            bY + math.sin(ft*10)*1e9,
-            VoidState.Z + z*1e10
-        )
-
-    elseif m == "Extreme Desync" then
-        local et = t*15; local r = 1e12
-        return Vector3.new(
-            VoidState.X + math.sin(et)*r,
-            bY + math.cos(et*1.5)*r*0.1,
-            VoidState.Z + math.cos(et)*r
-        )
-
-    elseif m == "Quantum Oscillation" then
-        local qt = t*50; local r = 1e11*math.sin(qt)
-        return Vector3.new(VoidState.X+r, bY+math.cos(qt)*1e10, VoidState.Z+r)
-
-    elseif m == "Frame Skip" then
-        if tick()%0.1 < 0.05 then
-            return Vector3.new(VoidState.X*2, bY+1e11, VoidState.Z*2)
+            if not Config.PulseDesync.Enabled then break end
         end
-        return Vector3.new(VoidState.X, bY, VoidState.Z)
+        pulseTask = nil
+        pulsePhase = "attack"
+    end)
+end
 
-    elseif m == "Seizure" then
-        VoidState.SeizureTimer = VoidState.SeizureTimer + dt * CFG.SeizureSpeed
-        if VoidState.SeizureTimer >= 1 then
-            VoidState.SeizureTimer = VoidState.SeizureTimer - 1
-            VoidState.SeizureIndex = VoidState.SeizureIndex + 1
-            if VoidState.SeizureIndex > #VoidState.SeizurePool then
-                VoidState.SeizureIndex = 1
-                refreshSeizurePool()
+local function stopPulseDesync()
+    Config.PulseDesync.Enabled = false
+    if pulseTask then task.cancel(pulseTask); pulseTask = nil end
+    -- Restore position
+    if pulseHrp and pulseRealCF and pulseHrp.Parent then
+        pcall(function()
+            pulseHrp.CFrame                  = pulseRealCF
+            pulseHrp.AssemblyLinearVelocity  = pulseRealV or Vector3.new(0,0,0)
+            pulseHrp.AssemblyAngularVelocity = pulseRealVA or Vector3.new(0,0,0)
+        end)
+    end
+    pulsePhase = "attack"
+    pulseHrp   = nil
+end
+
+-- ═══════════════════════════════════════════
+-- VOID SPAM MAIN
+-- ═══════════════════════════════════════════
+Connections.VoidHeartbeat = RunService.Heartbeat:Connect(function()
+    if not Config.VoidSpam.Enabled then return end
+    pcall(function()
+        hrp = LocalPlayer.Character.HumanoidRootPart
+        clientCFrame          = hrp.CFrame
+        clientVelocity        = hrp.AssemblyLinearVelocity
+        clientAngularVelocity = hrp.AssemblyAngularVelocity
+        if wtVoidActive then return end
+        -- Don't run if Pulse Desync is managing the position
+        if Config.PulseDesync.Enabled then return end
+        local method = VoidMethods[Config.VoidSpam.Method]
+        if method then method() end
+    end)
+end)
+
+Connections.VoidRender = RunService:BindToRenderStep("VoidRestore", Enum.RenderPriority.First.Value, function()
+    if hrp and Config.VoidSpam.Enabled and not Config.PulseDesync.Enabled then
+        pcall(function()
+            hrp.CFrame                  = clientCFrame
+            hrp.AssemblyLinearVelocity  = clientVelocity
+            hrp.AssemblyAngularVelocity = clientAngularVelocity
+        end)
+    end
+end)
+
+-- Weapon Tracker Void (send to boost altitude when enemy shoots)
+Connections.WeaponTrackerVoid = RunService.Heartbeat:Connect(function()
+    if not Config.WeaponTracker.Enabled or not wtVoidActive then return end
+    if not Config.VoidSpam.Enabled then return end
+    pcall(function()
+        local myChar = LocalPlayer.Character
+        if not myChar then return end
+        local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+        if not myRoot then return end
+        local realCF = clientCFrame or myRoot.CFrame
+        myRoot.CFrame = CFrame.new(
+            realCF.Position.X + math.random(-200, 200),
+            Config.WeaponTracker.VoidAltitude,
+            realCF.Position.Z + math.random(-200, 200)
+        )
+        myRoot.AssemblyLinearVelocity  = Vector3.new(0,0,0)
+        myRoot.AssemblyAngularVelocity = Vector3.new(0,0,0)
+    end)
+end)
+
+-- ═══════════════════════════════════════════
+-- PROJECTILE TP SYSTEM (IMPROVED)
+-- Now respects Priority, TeamCheck, VisCheck,
+-- MaxDistance, HitboxSize, ShootAttempts
+-- Only fires during "attack" phase if PulseDesync active
+-- ═══════════════════════════════════════════
+local function FindCoreProjectile()
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj.Name == "CoreProjectile" and obj:FindFirstChild("TouchInterest") then
+            return obj
+        end
+    end
+    return nil
+end
+
+local function GetEnemyHitbox(enemy)
+    if not enemy or not enemy.Character then return nil end
+    local targetPart = Config.ProjectileTP.TargetPart
+    return enemy.Character:FindFirstChild(targetPart)
+        or enemy.Character:FindFirstChild("HitBoxHead")
+        or enemy.Character:FindFirstChild("HitBoxHeadSmall")
+        or enemy.Character:FindFirstChild("Head")
+end
+
+-- Creates a temporary expanded hitbox part near the enemy for easier hit detection
+local function createExpandedHitbox(enemy)
+    if not enemy or not enemy.Character then return nil end
+    local root = enemy.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+
+    local size = Config.ProjectileTP.HitboxSize
+    local hitbox = Instance.new("Part")
+    hitbox.Name         = "_ExpandedHitbox"
+    hitbox.Size         = Vector3.new(size, size, size)
+    hitbox.CFrame       = root.CFrame
+    hitbox.Anchored     = true
+    hitbox.CanCollide   = false
+    hitbox.Transparency = 1
+    hitbox.Parent       = Workspace
+
+    -- Auto destroy after 1 second
+    task.delay(1, function()
+        pcall(function() hitbox:Destroy() end)
+    end)
+
+    return hitbox
+end
+
+Connections.ProjectileTP = RunService.Heartbeat:Connect(function()
+    if not Config.ProjectileTP.Enabled then return end
+
+    -- If Pulse Desync is running, only fire during attack phase
+    if Config.PulseDesync.Enabled and pulsePhase ~= "attack" then return end
+
+    -- If Ragebot hide/attack sync is running, only fire during attack phase
+    if Config.Ragebot.Enabled and Config.Ragebot.VoidSpamSync and ragebotPhase ~= "attack" then return end
+
+    pcall(function()
+        local projectile = FindCoreProjectile()
+        if not projectile then return end
+
+        if Config.ProjectileTP.Cache and not ProjectileCache[projectile] then
+            ProjectileCache[projectile] = true
+        end
+
+        CacheEnemies()
+
+        for _, enemy in ipairs(EnemyCache) do
+            local hitbox = GetEnemyHitbox(enemy)
+            if not hitbox then continue end
+
+            -- Shoot attempts (from image: shoot attempts slider)
+            for attempt = 1, math.max(1, Config.ProjectileTP.ShootAttempts) do
+                firetouchinterest(projectile, hitbox, 0)
+                task.wait(Config.ProjectileTP.LoopDelay)
+                firetouchinterest(projectile, hitbox, 1)
+
+                -- Also try with expanded hitbox if size > default
+                if Config.ProjectileTP.HitboxSize > 5 then
+                    local expanded = createExpandedHitbox(enemy)
+                    if expanded then
+                        firetouchinterest(projectile, expanded, 0)
+                        task.wait(0.01)
+                        firetouchinterest(projectile, expanded, 1)
+                    end
+                end
             end
         end
-        local idx = clamp(VoidState.SeizureIndex, 1, #VoidState.SeizurePool)
-        return VoidState.SeizurePool[idx]
+    end)
+end)
 
-    elseif m == "Hyperdrive" then
-        local dx, dz = computeDriftDir(t)
-        local hyper  = CFG.HyperdriveSpeed * 1e8
-        VoidState.DirX    = VoidState.DirX + (dx - VoidState.DirX) * 0.9 * dt * 20
-        VoidState.DirZ    = VoidState.DirZ + (dz - VoidState.DirZ) * 0.9 * dt * 20
-        VoidState.X       = VoidState.X + VoidState.DirX * hyper * dt
-        VoidState.Z       = VoidState.Z + VoidState.DirZ * hyper * dt
-        VoidState.YOffset = VoidState.YOffset + math.sin(t*7.3) * CFG.Void.YDriftSpeed * dt * 3
-        return Vector3.new(VoidState.X, CFG.Void.YBase + VoidState.YOffset, VoidState.Z)
+-- ═══════════════════════════════════════════
+-- AUTO SHOOT
+-- ═══════════════════════════════════════════
+Connections.AutoShoot = RunService.Heartbeat:Connect(function()
+    if not Config.ProjectileTP.AutoShoot then return end
+    -- If Pulse Desync is running, only auto-shoot during attack phase
+    if Config.PulseDesync.Enabled and pulsePhase ~= "attack" then return end
+    pcall(function()
+        local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        if tool then tool:Activate() end
+    end)
+end)
 
-    elseif m == "Schrodinger" then
-        local phaseA = Vector3.new(
-            VoidState.X + math.sin(t*3.7)*5e11,
-            bY + math.cos(t*2.1)*1e10,
-            VoidState.Z + math.cos(t*3.7)*5e11
-        )
-        local phaseB = Vector3.new(
-            VoidState.X - math.cos(t*5.3)*5e11,
-            bY - math.sin(t*4.9)*1e10,
-            VoidState.Z + math.sin(t*5.3)*5e11
-        )
-        return (tick()%0.016 < 0.008) and phaseA or phaseB
+-- ═══════════════════════════════════════════
+-- RAGEBOT (IMPROVED)
+-- Now has hide/attack timing from the image
+-- Persistent across round transitions
+-- ═══════════════════════════════════════════
+local ragebotLoopTask = nil
 
-    elseif m == "Glitch Storm" then
-        local primes = {2,3,5,7,11,13,17,19}
-        local gx, gy, gz = 0, 0, 0
-        for i = 1, math.min(CFG.GlitchLayers, 8) do
-            local p   = primes[i]
-            local amp = 1e11 / i
-            gx = gx + math.sin(t * p * 1.7) * amp
-            gy = gy + math.cos(t * p * 2.3) * amp * 0.1
-            gz = gz + math.cos(t * p * 1.3) * amp
-        end
-        gx = gx + (math.random()-0.5) * 2e10
-        gz = gz + (math.random()-0.5) * 2e10
-        return Vector3.new(VoidState.X+gx, CFG.Void.YBase+gy, VoidState.Z+gz)
+local function ragebotGetTarget()
+    -- Use same priority system as Projectile TP
+    local enemies = GetEnemiesSorted()
+    if #enemies > 0 then return enemies[1] end
+    return nil
+end
 
-    elseif m == "Dimensional Rift" then
-        local k     = CFG.RiftPhase
-        local rMax  = 1e12
-        local theta = t * (1 + k * 0.1)
-        local r     = rMax * math.abs(math.cos(k * theta))
-        local plane = math.floor(t * k) % k
-        local pAngle= (plane / k) * math.pi * 2
-        local fAngle= theta + pAngle
-        local planeY= math.sin(t * k + plane * math.pi * 2 / k) * 1e11
-        return Vector3.new(
-            VoidState.X + math.cos(fAngle) * r,
-            CFG.Void.YBase + planeY,
-            VoidState.Z + math.sin(fAngle) * r
-        )
+local function startRagebotLoop()
+    if ragebotLoopTask then task.cancel(ragebotLoopTask); ragebotLoopTask = nil end
 
-    elseif m == "Wormhole" then
-        VoidState.WormholePhase = VoidState.WormholePhase + dt * 12
-        local count     = CFG.WormholeCount
-        local exitIdx   = math.floor(VoidState.WormholePhase) % count
-        local exitAngle = (exitIdx / count) * math.pi * 2
-        local exitR     = 1e11
-        local exitY     = bY + math.sin(exitAngle*2+t) * 2e10
-        local sectorOsc = math.sin(VoidState.WormholePhase * math.pi) * 5e9
-        return Vector3.new(
-            VoidState.X + math.cos(exitAngle) * (exitR + sectorOsc),
-            exitY,
-            VoidState.Z + math.sin(exitAngle) * (exitR + sectorOsc)
-        )
+    ragebotLoopTask = task.spawn(function()
+        while Config.Ragebot.Enabled do
+            local enemy  = ragebotGetTarget()
+            local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 
-    elseif m == "Phantom" then
-        VoidState.PhantomPhase = VoidState.PhantomPhase + dt * 30
-        local layers  = CFG.PhantomLayers
-        local layer   = math.floor(VoidState.PhantomPhase) % layers
-        local layerT  = t + (layer / layers) * math.pi * 2
-        local baseR   = 3e11
-        local baseX   = VoidState.X + math.sin(layerT * 1.3) * baseR
-        local baseZ   = VoidState.Z + math.cos(layerT * 0.9) * baseR
-        local baseY   = bY + math.cos(layerT * 2.1) * 5e10
-        local perpX   = math.cos(layerT + layer) * 8e10 * (layer + 1)
-        local perpZ   = math.sin(layerT + layer) * 8e10 * (layer + 1)
-        return Vector3.new(baseX + perpX, baseY, baseZ + perpZ)
+            if enemy and enemy.Character and myRoot then
+                local enemyRoot = enemy.Character:FindFirstChild("HumanoidRootPart")
 
-    elseif m == "Supernova" then
-        VoidState.NovaTimer = VoidState.NovaTimer + dt
-        if not VoidState.NovaActive then
-            local qt = t * 40; local r = 5e9 * math.abs(math.sin(qt))
-            if VoidState.NovaTimer > 2.5 then
-                VoidState.NovaActive = true
-                VoidState.NovaTimer  = 0
-                VoidState.NovaPos    = Vector3.new(
-                    VoidState.X + (math.random()-0.5) * 1e12,
-                    bY + (math.random()-0.5) * 1e11,
-                    VoidState.Z + (math.random()-0.5) * 1e12
-                )
-            end
-            return Vector3.new(
-                VoidState.X + math.cos(qt)*r,
-                bY + math.sin(qt*0.7)*r*0.1,
-                VoidState.Z + math.sin(qt)*r
-            )
-        else
-            if VoidState.NovaTimer > 0.8 then
-                VoidState.NovaActive = false
-                VoidState.NovaTimer  = 0
-            end
-            return VoidState.NovaPos
-        end
+                if enemyRoot then
+                    ragebotCurrentTarget = enemy
 
-    elseif m == "Mirror" then
-        local flip = (tick() % (CFG.FlickerInterval*2) < CFG.FlickerInterval)
-        local basePos = Vector3.new(
-            VoidState.X + math.sin(t*0.7)*2e10,
-            bY + math.cos(t*0.5)*5e9,
-            VoidState.Z + math.cos(t*0.7)*2e10
-        )
-        if flip then return basePos end
-        if CFG.MirrorAxes then
-            return Vector3.new(-basePos.X, CFG.Void.YBase*2 - basePos.Y, -basePos.Z)
-        else
-            if math.abs(basePos.X) > math.abs(basePos.Z) then
-                return Vector3.new(-basePos.X, basePos.Y, basePos.Z)
+                    if Config.Ragebot.VoidSpamSync then
+                        -- HIDE PHASE: orbit enemy at void altitude (server can't hit you)
+                        ragebotPhase = "hide"
+                        if Config.Ragebot.ClientTP then
+                            local t      = tick() * Config.Ragebot.OrbitSpeed
+                            local radius = Config.Ragebot.OrbitRadius
+                            enemyRoot.CFrame = CFrame.new(
+                                myRoot.Position + Vector3.new(math.sin(t)*radius, 0, math.cos(t)*radius)
+                            )
+                        end
+                        task.wait(Config.Ragebot.HideTime)
+
+                        -- ATTACK PHASE: real position, fire projectiles
+                        ragebotPhase = "attack"
+                        task.wait(Config.Ragebot.AttackTime)
+                    else
+                        -- Simple orbit without timing
+                        ragebotPhase = "attack"
+                        if Config.Ragebot.ClientTP then
+                            local t      = tick() * Config.Ragebot.OrbitSpeed
+                            local radius = Config.Ragebot.OrbitRadius
+                            enemyRoot.CFrame = CFrame.new(
+                                myRoot.Position + Vector3.new(math.sin(t)*radius, 0, math.cos(t)*radius)
+                            )
+                        end
+                        task.wait(0.05)
+                    end
+                end
             else
-                return Vector3.new(basePos.X, basePos.Y, -basePos.Z)
+                ragebotPhase = "attack"
+                task.wait(0.1)
             end
+
+            if not Config.Ragebot.Enabled then break end
         end
 
-    elseif m == "Pulse Wave" then
-        local pFreq  = CFG.PulseWaveFreq
-        local pPhase = t * pFreq * math.pi * 2
-        local pR     = 1e12 * math.abs(math.sin(pPhase))
-        local pAngle = t * 3.7
-        local pY     = math.sin(pPhase * 1.3) * 5e10
-        return Vector3.new(
-            VoidState.X + math.cos(pAngle) * pR,
-            bY + pY,
-            VoidState.Z + math.sin(pAngle) * pR
-        )
-
-    elseif m == "Echo" then
-        local currentBase = Vector3.new(
-            VoidState.X + math.sin(t*2.1)*1e10,
-            bY + math.cos(t*1.7)*5e9,
-            VoidState.Z + math.cos(t*2.1)*1e10
-        )
-        VoidState.EchoHistory[VoidState.EchoIndex] = currentBase
-        VoidState.EchoIndex = (VoidState.EchoIndex % #VoidState.EchoHistory) + 1
-        local delayFrames = math.floor(CFG.EchoDelay * 60)
-        local readIdx = ((VoidState.EchoIndex - delayFrames - 1) % #VoidState.EchoHistory) + 1
-        return VoidState.EchoHistory[readIdx] or currentBase
-
-    elseif m == "Singularity" then
-        local cPhase = math.sin(t * CFG.CollapseSpeed)
-        local cNorm  = (cPhase + 1) * 0.5
-        local cR     = lerp(1e8, 1e12, cNorm)
-        local dAngle = t * 2.3
-        local dY     = math.sin(t * 1.7 + math.pi * 0.5)
-        return Vector3.new(
-            VoidState.X + math.cos(dAngle) * cR,
-            bY + dY * cR * 0.1,
-            VoidState.Z + math.sin(dAngle) * cR
-        )
-
-    elseif m == "Storm Cell" then
-        local cellCount  = 5
-        local cellPeriod = 0.12
-        local cellIdx    = math.floor(t / cellPeriod) % cellCount
-        local speeds     = {1.3, 2.7, 4.1, 6.3, 9.7}
-        local radii      = {0.3, 0.55, 0.7, 0.85, 1.0}
-        local yFreqs     = {1.1, 1.9, 2.7, 3.3, 5.1}
-        local spd        = speeds[cellIdx + 1]
-        local rad        = CFG.StormRadius * radii[cellIdx + 1]
-        local yF         = yFreqs[cellIdx + 1]
-        local cAngle     = t * spd + cellIdx * (math.pi * 2 / cellCount)
-        local cY         = bY + math.sin(t * yF) * 2e10
-        return Vector3.new(
-            VoidState.X + math.cos(cAngle) * rad,
-            cY,
-            VoidState.Z + math.sin(cAngle) * rad
-        )
-    end
-
-    return Vector3.new(VoidState.X, bY, VoidState.Z)
-end
-
--- ═══════════════════════════════════════════
--- BYPASS ENGINE v4
--- ═══════════════════════════════════════════
-local function detectCorrection(hrp, targetPos)
-    if not hrp then return false end
-    local diff = (hrp.Position - VoidState.LastWrittenPos).Magnitude
-    return diff > 1e8 and diff < (targetPos - VoidState.LastWrittenPos).Magnitude
-end
-
-local function writeCFrame(hrp, pos)
-    pcall(function() hrp.CFrame = CFrame.new(pos) end)
-    VoidState.LastWrittenPos = pos
-end
-
-local function applyMomentum(hrp, targetPos, dt)
-    if not hrp then return end
-    local toTarget = targetPos - hrp.Position
-    VoidState.Momentum = VoidState.Momentum * CFG.Bypass.MomentumDecay
-        + toTarget * (1 - CFG.Bypass.MomentumDecay)
-    pcall(function() hrp.AssemblyLinearVelocity = VoidState.Momentum / dt end)
-end
-
-local function maybePulse(hrp)
-    if not CFG.Bypass.NetworkPulse then return end
-    if math.random(1, CFG.Bypass.PulseRate) == 1 then
-        pcall(function()
-            local s = CFG.Bypass.PulseStrength
-            hrp.AssemblyLinearVelocity = Vector3.new(
-                (math.random()-0.5)*2*s,
-                (math.random()-0.5)*2*s,
-                (math.random()-0.5)*2*s
-            )
-        end)
-    end
-end
-
-local function maybeAntiCorrect(hrp, targetPos)
-    if not CFG.Bypass.AntiCorrect then return end
-    if detectCorrection(hrp, targetPos) then
-        VoidState.CorrectionCount = VoidState.CorrectionCount + 1
-        pcall(function()
-            local pushDir = targetPos - hrp.Position
-            if pushDir.Magnitude > 0 then
-                hrp.AssemblyLinearVelocity = pushDir.Unit
-                    * CFG.Bypass.PulseStrength * CFG.Bypass.AntiCorrectStr
-            end
-        end)
-    end
-end
-
-local function addJitter(pos)
-    if not CFG.Bypass.Jitter then return pos end
-    local s = CFG.Bypass.JitterScale
-    return pos + Vector3.new(
-        (math.random()-0.5)*2*s,
-        (math.random()-0.5)*2*s,
-        (math.random()-0.5)*2*s
-    )
-end
-
-local function selectAdaptiveMode()
-    local m = CFG.Void.Method
-    local cleanMethods = {
-        Stable=true, Circle=true, Spiral=true, Lissajous=true,
-        Helix=true, ["Figure 8"]=true, ["Double Helix"]=true,
-        ["Chaotic Sphere"]=true, ["Pulse Wave"]=true,
-        Echo=true, Singularity=true, ["Storm Cell"]=true,
-    }
-    local chaosMethods = {
-        ["Quantum Tunneling"]=true, ["Fractal Desync"]=true,
-        ["Extreme Desync"]=true, ["Quantum Oscillation"]=true,
-        ["Frame Skip"]=true, Seizure=true, Wormhole=true,
-        Phantom=true, Supernova=true,
-    }
-    local hybridMethods = {
-        Drift=true, Chaotic=true, Tornado=true, Butterfly=true,
-        Hyperdrive=true, ["Glitch Storm"]=true, ["Dimensional Rift"]=true,
-        ["Storm Cell"]=true,
-    }
-    local multiMethods = {
-        Schrodinger=true, Mirror=true, Flicker=true,
-        Seizure=true, Phantom=true,
-    }
-    if multiMethods[m]  then return "Multi-Write"      end
-    if chaosMethods[m]  then return "Physics Chaos"    end
-    if hybridMethods[m] then return "Hybrid"           end
-    if cleanMethods[m]  then return "Clean CFrame"     end
-    return "Extreme Networking"
-end
-
-local function applyBypass(hrp, targetPos, dt)
-    if not hrp then return end
-    local mode = CFG.Bypass.Mode
-    if mode == "Adaptive" then
-        VoidState.AdaptiveTimer = VoidState.AdaptiveTimer + dt
-        if VoidState.AdaptiveTimer > (1 - CFG.Bypass.AdaptiveSensitivity) * 2 then
-            VoidState.AdaptiveTimer = 0
-            local newMode = selectAdaptiveMode()
-            if newMode ~= VoidState.AdaptiveMode then
-                VoidState.AdaptiveMode   = newMode
-                CFG.Stats.BypassSwitches = CFG.Stats.BypassSwitches + 1
-            end
-        end
-        mode = VoidState.AdaptiveMode
-    end
-
-    local writePos = (mode ~= "Clean CFrame" and mode ~= "Multi-Write")
-        and addJitter(targetPos) or targetPos
-
-    if mode == "Clean CFrame" then
-        writeCFrame(hrp, writePos)
-        pcall(function()
-            hrp.AssemblyLinearVelocity  = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-        end)
-        maybeAntiCorrect(hrp, targetPos)
-
-    elseif mode == "Velocity" then
-        pcall(function()
-            hrp.AssemblyLinearVelocity = (targetPos - hrp.Position) * 120
-        end)
-
-    elseif mode == "Hybrid" then
-        writeCFrame(hrp, writePos)
-        pcall(function()
-            hrp.AssemblyLinearVelocity = Vector3.new(
-                (math.random()-0.5)*100, 0.01, (math.random()-0.5)*100
-            )
-        end)
-        maybeAntiCorrect(hrp, targetPos)
-
-    elseif mode == "Physics Chaos" then
-        writeCFrame(hrp, writePos)
-        pcall(function()
-            local s = CFG.Bypass.PulseStrength
-            hrp.AssemblyLinearVelocity = Vector3.new(
-                (math.random()-0.5)*2*s,
-                (math.random()-0.5)*2*s,
-                (math.random()-0.5)*2*s
-            )
-        end)
-
-    elseif mode == "Multi-Write" then
-        local count = CFG.Bypass.MultiWriteCount
-        for i = 1, count do
-            local subOffset = Vector3.new(
-                math.sin(i*1.3)*10, math.sin(i*2.1)*5, math.cos(i*1.7)*10
-            )
-            writeCFrame(hrp, writePos + subOffset)
-        end
-        writeCFrame(hrp, writePos)
-        pcall(function()
-            hrp.AssemblyLinearVelocity  = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-        end)
-
-    elseif mode == "Momentum Carry" then
-        writeCFrame(hrp, writePos)
-        if CFG.Bypass.Momentum then
-            applyMomentum(hrp, targetPos, dt)
-        else
-            pcall(function() hrp.AssemblyLinearVelocity = Vector3.zero end)
-        end
-
-    else
-        writeCFrame(hrp, writePos)
-        pcall(function()
-            hrp.AssemblyLinearVelocity  = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-        end)
-        maybePulse(hrp)
-        maybeAntiCorrect(hrp, targetPos)
-    end
-
-    VoidState.LastPos = hrp.Position
-end
-
--- ═══════════════════════════════════════════
--- GROUND Y SCAN
--- ═══════════════════════════════════════════
-local function updateGroundY()
-    local rp = RaycastParams.new()
-    rp.FilterType = Enum.RaycastFilterType.Exclude
-    if LP.Character then rp.FilterDescendantsInstances = {LP.Character} end
-    local result = workspace:Raycast(Vector3.new(0,1000,0), Vector3.new(0,-2000,0), rp)
-    if result then VoidState.GroundY = result.Position.Y + 3 end
-end
-
--- ═══════════════════════════════════════════
--- DESYNC SPOOF POSITION
--- ═══════════════════════════════════════════
-local function stepSpoofPosition(dt)
-    VoidState.GroundUpdateT = VoidState.GroundUpdateT + dt
-    if VoidState.GroundUpdateT > 5 then
-        VoidState.GroundUpdateT = 0
-        task.spawn(updateGroundY)
-    end
-    local nv = math.noise(VoidState.Elapsed * 0.8, 42.0)
-    VoidState.SpoofAngle = VoidState.SpoofAngle
-        + VoidState.SpoofDir * (1.5 + nv * CFG.Desync.WanderChaos) * CFG.Desync.WanderSpeed * dt
-    if math.noise(VoidState.Elapsed * 0.3, 7.7) > 0.6 then
-        VoidState.SpoofDir = -VoidState.SpoofDir
-    end
-    local r = CFG.Desync.Radius * (0.5 + 0.5 * math.abs(math.noise(VoidState.Elapsed * 0.5, 0)))
-    VoidState.FakeGroundPos = Vector3.new(
-        VoidState.SpoofBaseX + math.cos(VoidState.SpoofAngle) * r,
-        VoidState.GroundY,
-        VoidState.SpoofBaseZ + math.sin(VoidState.SpoofAngle) * r
-    )
-    if CFG.Desync.BaitMode then
-        local best, bd = nil, math.huge
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LP and p.Character then
-                local eh = p.Character:FindFirstChild("HumanoidRootPart")
-                if eh then
-                    local d = (eh.Position - VoidState.FakeGroundPos).Magnitude
-                    if d < bd then bd = d; best = eh end
-                end
-            end
-        end
-        if best then
-            local toEnemy = best.Position - VoidState.FakeGroundPos
-            if toEnemy.Magnitude > 0 then
-                VoidState.FakeGroundPos = VoidState.FakeGroundPos + toEnemy.Unit * CFG.Desync.BaitOffset
-            end
-        end
-    end
-end
-
--- ═══════════════════════════════════════════
--- DESYNC FLICKER
--- ═══════════════════════════════════════════
-local function runDesyncFlicker()
-    if VoidState.InFlicker then return end
-    local hrp = getHRP(); if not hrp then return end
-    VoidState.InFlicker = true
-    local savedPos = VoidState.IntendedPos
-
-    local function doFlicker()
-        local h = getHRP(); if not h then return end
-        pcall(function()
-            h.CFrame = CFrame.new(VoidState.FakeGroundPos)
-            h.AssemblyLinearVelocity = Vector3.new(0, -0.01, 0)
-        end)
-        task.delay(0, function()
-            local h2 = getHRP()
-            if h2 and CFG.Void.On then
-                pcall(function()
-                    h2.CFrame = CFrame.new(savedPos)
-                    h2.AssemblyLinearVelocity = Vector3.zero
-                end)
-            end
-        end)
-    end
-
-    doFlicker()
-    if CFG.Desync.TripleFlicker then
-        task.delay(0.008, doFlicker)
-        task.delay(0.016, doFlicker)
-    end
-    task.delay(0.02, function() VoidState.InFlicker = false end)
-end
-
--- ═══════════════════════════════════════════
--- PROJECTILE DETECTION
--- ═══════════════════════════════════════════
-local function detectProjectiles()
-    if not CFG.Evade.ProjDetect then return false end
-    local myPos  = VoidState.IntendedPos
-    local params = OverlapParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    if LP.Character then params.FilterDescendantsInstances = {LP.Character} end
-    local ok, parts = pcall(function()
-        return workspace:GetPartBoundsInRadius(myPos, CFG.Evade.ProjRange, params)
+        ragebotLoopTask = nil
+        ragebotPhase    = "attack"
     end)
-    if not ok or not parts then return false end
-    for _, part in ipairs(parts) do
-        if not part:IsDescendantOf(LP.Character or {}) then
-            local vel = part.AssemblyLinearVelocity
-            if vel.Magnitude > CFG.Evade.ProjSpeed then
-                local toUs = myPos - part.Position
-                if toUs.Magnitude > 1 and toUs.Unit:Dot(vel.Unit) > 0.35 then
-                    CFG.Stats.ProjectilesEvaded = CFG.Stats.ProjectilesEvaded + 1
-                    return true
+end
+
+local function stopRagebotLoop()
+    if ragebotLoopTask then task.cancel(ragebotLoopTask); ragebotLoopTask = nil end
+    ragebotPhase = "attack"
+end
+
+-- Ragebot persistence: re-enable after round/character reset
+local function setupRagebotPersistence()
+    if ragebotPersistConn then ragebotPersistConn:Disconnect() end
+
+    ragebotPersistConn = LocalPlayer.CharacterAdded:Connect(function(character)
+        if not Config.Ragebot.PersistAcrossRounds then return end
+        if not ragebotWasEnabled then return end
+
+        -- Wait for character to fully load
+        character:WaitForChild("HumanoidRootPart", 10)
+        task.wait(1.5)
+
+        -- Re-enable ragebot
+        if not Config.Ragebot.Enabled then
+            Config.Ragebot.Enabled = true
+            startRagebotLoop()
+            Library:Notify("Ragebot auto-resumed after round", 3)
+        end
+    end)
+end
+
+-- Track when ragebot was manually enabled
+local function enableRagebot()
+    Config.Ragebot.Enabled = true
+    ragebotWasEnabled      = true
+    startRagebotLoop()
+    setupRagebotPersistence()
+end
+
+local function disableRagebot()
+    Config.Ragebot.Enabled = false
+    ragebotWasEnabled      = false
+    stopRagebotLoop()
+end
+
+-- ═══════════════════════════════════════════
+-- WEAPON TRACKER SYSTEM
+-- ═══════════════════════════════════════════
+local WT_START_NAMES = {"StartShooting", "Shooting"}
+local WT_STOP_NAMES  = {"StopShooting", "Reload", "StartReloading"}
+
+local function wtIsEnemy(player)
+    if player == LocalPlayer then return false end
+    if Config.WeaponTracker.TeamCheck and isSameTeam(player) then return false end
+    return IsAlive(player)
+end
+
+local function wtOnEnemyShootStart(shooter)
+    if not Config.WeaponTracker.Enabled then return end
+    if not wtIsEnemy(shooter) then return end
+    wtShootingPlayers[shooter] = true
+    wtEnemyShooting = true
+    wtLastShooter   = shooter
+    wtVoidActive    = true
+    if wtTeleportTask then task.cancel(wtTeleportTask); wtTeleportTask = nil end
+end
+
+local function wtOnEnemyShootStop(shooter)
+    if not Config.WeaponTracker.Enabled then return end
+    wtShootingPlayers[shooter] = nil
+    local anyStillShooting = false
+    for _ in pairs(wtShootingPlayers) do anyStillShooting = true; break end
+
+    if not anyStillShooting then
+        wtEnemyShooting = false
+        wtVoidActive    = false
+        local shooter_ref = shooter
+        wtTeleportTask = task.delay(Config.WeaponTracker.TeleportDelay, function()
+            if not Config.WeaponTracker.Enabled then return end
+            if not IsAlive(shooter_ref) then return end
+            local enemyRoot = shooter_ref.Character and shooter_ref.Character:FindFirstChild("HumanoidRootPart")
+            local myRoot    = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if enemyRoot and myRoot then
+                pcall(function() myRoot.CFrame = enemyRoot.CFrame end)
+            end
+            wtTeleportTask = nil
+        end)
+    end
+end
+
+local function startWeaponTrackerHook()
+    if wtHookActive then return end
+    local ok = pcall(function()
+        local UseItemRemote = ReplicatedStorage.Remotes.Replication.Fighter.UseItem
+        local conn = UseItemRemote.OnClientEvent:Connect(function(fighterOrPlayer, enumAction)
+            if not Config.WeaponTracker.Enabled then return end
+            local shooter = nil
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer then
+                    local char = p.Character
+                    if char then
+                        local ok2, result = pcall(function()
+                            if typeof(fighterOrPlayer) == "Instance" then
+                                return fighterOrPlayer:IsDescendantOf(char)
+                            end
+                            return fighterOrPlayer == p
+                        end)
+                        if ok2 and result then shooter = p; break end
+                    end
                 end
             end
-        end
-    end
-    return false
-end
+            if not shooter then shooter = GetClosestEnemy() end
+            if not shooter then return end
 
--- ═══════════════════════════════════════════
--- VOID EVASION
--- ═══════════════════════════════════════════
-local function checkVoidEvasion()
-    if not CFG.Evade.On or VoidState.EvadeCooldown > 0 then return end
-    if detectProjectiles() then
-        VoidState.X           = VoidState.X + randSign() * CFG.Evade.Speed * 0.5
-        VoidState.Z           = VoidState.Z + randSign() * CFG.Evade.Speed * 0.5
-        VoidState.YOffset     = VoidState.YOffset + randSign() * CFG.Evade.Vertical
-        VoidState.EvadeCooldown = CFG.Evade.Cooldown * 0.5
-        return
-    end
-    local minDist, threatVec = math.huge, Vector3.zero
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LP and p.Character then
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            local hum = p.Character:FindFirstChildOfClass("Humanoid")
-            if hrp and hum and hum.Health > 0 then
-                local vel  = hrp.AssemblyLinearVelocity
-                local pred = hrp.Position + vel * 0.5
-                local d    = (pred - VoidState.IntendedPos).Magnitude
-                if d < minDist then
-                    minDist   = d
-                    threatVec = (pred - VoidState.IntendedPos).Unit
+            local actionStr = tostring(enumAction)
+            local isStart, isStop = false, false
+            for _, name in ipairs(WT_START_NAMES) do
+                if string.find(actionStr, name, 1, true) then isStart = true; break end
+            end
+            if not isStart then
+                for _, name in ipairs(WT_STOP_NAMES) do
+                    if string.find(actionStr, name, 1, true) then isStop = true; break end
                 end
             end
-        end
-    end
-    if minDist < CFG.Evade.Radius then
-        local esc    = -threatVec
-        local threat = clamp(1 - (minDist / CFG.Evade.Radius), 0, 1)
-        VoidState.X   = VoidState.X + esc.X * CFG.Evade.Speed * (1 + threat * 2)
-        VoidState.Z   = VoidState.Z + esc.Z * CFG.Evade.Speed * (1 + threat * 2)
-        if math.random() < (CFG.Evade.VertBias + threat * 0.2) then
-            local vDir = CFG.Evade.ForceUp and 1 or randSign()
-            VoidState.YOffset = VoidState.YOffset + vDir * CFG.Evade.Vertical
-        end
-        VoidState.EvadeCooldown = CFG.Evade.Cooldown * (1 - threat * 0.3)
-        if CFG.Void.Method == "Seizure" then refreshSeizurePool() end
-    end
+            if isStart then wtOnEnemyShootStart(shooter)
+            elseif isStop then wtOnEnemyShootStop(shooter) end
+        end)
+        table.insert(antiOOBConnections, conn)
+        wtHookActive = true
+    end)
+    if not ok then Library:Notify("Weapon Tracker: hook failed", 3) end
+end
+
+local function stopWeaponTrackerHook()
+    wtHookActive = false; wtEnemyShooting = false; wtVoidActive = false
+    wtShootingPlayers = {}
+    if wtTeleportTask then task.cancel(wtTeleportTask); wtTeleportTask = nil end
 end
 
 -- ═══════════════════════════════════════════
--- GHOST MODE
+-- ANTI OOB
 -- ═══════════════════════════════════════════
-local function applyGhostMode(on)
-    local char = LP.Character
-    if not char then return end
-    for _, v in ipairs(char:GetDescendants()) do
-        if v:IsA("BasePart") or v:IsA("MeshPart") or v:IsA("UnionOperation") then
-            pcall(function()
-                v.LocalTransparencyModifier = on and CFG.GhostMode.Transparency or 0
-            end)
-        end
+local function antiOOB_HideOOBParts(hide)
+    for _, part in ipairs(CollectionService:GetTagged("OutOfBoundsPart")) do
+        pcall(function() if hide then part.Transparency = 1 end end)
+    end
+    for _, part in ipairs(CollectionService:GetTagged("OutOfBoundsSafePart")) do
+        pcall(function() if hide then part.Transparency = 1 end end)
     end
 end
 
--- ═══════════════════════════════════════════
--- ANTI SPECTATOR
--- ═══════════════════════════════════════════
-local function checkAntiSpec()
-    if not CFG.AntiSpec.On then return end
+local function antiOOB_PatchModule()
+    if antiOOBModulePatched then return end
     pcall(function()
-        local cam = workspace.CurrentCamera
-        if cam and cam.CameraSubject then
-            local subject = cam.CameraSubject
-            local isMyHum = LP.Character and (subject == LP.Character:FindFirstChildOfClass("Humanoid"))
-            if not isMyHum then
-                -- Spectator detected: scramble position
-                VoidState.X = VoidState.X + randSign() * 5e10
-                VoidState.Z = VoidState.Z + randSign() * 5e10
-                Library:Notify("Anti-Spec: Scrambled position", 2)
+        local OOBMachine = require(ReplicatedStorage.Modules.OutOfBoundsMachine)
+        if OOBMachine then
+            if OOBMachine.IsOutOfBounds then OOBMachine.IsOutOfBounds = function() return nil end end
+            if OOBMachine.Update        then OOBMachine.Update = function() end end
+        end
+        antiOOBModulePatched = true
+        Library:Notify("Anti OOB: Module patched ✓", 2)
+    end)
+end
+
+local function antiOOB_SpoofRemote()
+    if antiOOBHookActive then return end
+    local ok = pcall(function()
+        local OOBRemote = ReplicatedStorage.Remotes.Replication.Fighter.OutOfBounds
+        antiOOBHookRef = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            if (method == "FireServer" or method == "InvokeServer") and self == OOBRemote then
+                if Config.AntiOOB.SpoofRemote then return end
             end
-        end
+            return antiOOBHookRef(self, ...)
+        end))
+        antiOOBHookActive = true
+        Library:Notify("Anti OOB: Remote spoof ✓", 2)
     end)
+    if not ok then Library:Notify("Anti OOB: hookmetamethod not supported", 3) end
+end
+
+local function antiOOB_StopSpoofRemote()
+    if not antiOOBHookActive then return end
+    pcall(function() if antiOOBHookRef then hookmetamethod(game, "__namecall", antiOOBHookRef) end end)
+    antiOOBHookActive = false; antiOOBHookRef = nil
+end
+
+local function startAntiOOB()
+    if Config.AntiOOB.SpoofRemote  then antiOOB_SpoofRemote()      end
+    if Config.AntiOOB.PatchModule   then antiOOB_PatchModule()      end
+    if Config.AntiOOB.HideOOBParts then antiOOB_HideOOBParts(true) end
+    local c1 = CollectionService:GetInstanceAddedSignal("OutOfBoundsPart"):Connect(function(part)
+        if Config.AntiOOB.Enabled and Config.AntiOOB.HideOOBParts then pcall(function() part.Transparency=1 end) end
+    end)
+    local c2 = CollectionService:GetInstanceAddedSignal("OutOfBoundsSafePart"):Connect(function(part)
+        if Config.AntiOOB.Enabled and Config.AntiOOB.HideOOBParts then pcall(function() part.Transparency=1 end) end
+    end)
+    table.insert(antiOOBConnections, c1)
+    table.insert(antiOOBConnections, c2)
+end
+
+local function stopAntiOOB()
+    Config.AntiOOB.Enabled = false
+    antiOOB_StopSpoofRemote()
+    for _, conn in ipairs(antiOOBConnections) do pcall(function() conn:Disconnect() end) end
+    antiOOBConnections = {}
 end
 
 -- ═══════════════════════════════════════════
--- LOCK TO VOID — main per-frame logic
+-- EXPLOSION EFFECTS
 -- ═══════════════════════════════════════════
-local function lockToVoid(dt)
-    if VoidState.InFlicker then return end
-    if VoidState.EvadeCooldown > 0 then
-        VoidState.EvadeCooldown = VoidState.EvadeCooldown - dt
-    end
-
-    -- Chaos mode: auto-rotate through methods
-    if CFG.ChaosMode.On then
-        VoidState.ChaosTimer = VoidState.ChaosTimer + dt
-        if VoidState.ChaosTimer >= CFG.ChaosMode.Interval then
-            VoidState.ChaosTimer = 0
-            local idx = math.random(1, #allMethods)
-            CFG.Void.Method = allMethods[idx]
-            if CFG.Void.Method == "Seizure" then refreshSeizurePool() end
-            if CFG.Void.Method == "Echo"    then initEchoHistory()   end
-        end
-    end
-
-    -- Position logger
-    if CFG.PosLogger.On then
-        VoidState.LogTimer = VoidState.LogTimer + dt
-        if VoidState.LogTimer >= CFG.PosLogger.Interval then
-            VoidState.LogTimer = 0
-            print(string.format("[LE v4] Void XYZ: %.0f, %.0f, %.0f | Method: %s",
-                VoidState.X, CFG.Void.YBase + VoidState.YOffset, VoidState.Z,
-                CFG.Void.Method))
-        end
-    end
-
-    checkVoidEvasion()
-    VoidState.IntendedPos = computeVoidPosition(dt)
-    CFG.Stats.CycleCount  = CFG.Stats.CycleCount + 1
-
-    local hrp = getHRP(); if not hrp then return end
-    applyBypass(hrp, VoidState.IntendedPos, dt)
-
-    if CFG.Desync.On then
-        stepSpoofPosition(dt)
-        VoidState.DesyncTimer = VoidState.DesyncTimer + dt
-        if VoidState.DesyncTimer >= CFG.Desync.Tick then
-            VoidState.DesyncTimer = 0
-            task.spawn(runDesyncFlicker)
-        end
-    end
-
-    if CFG.GhostMode.On then
-        applyGhostMode(true)
-    end
-end
-
--- ═══════════════════════════════════════════
--- START / STOP VOID
--- ═══════════════════════════════════════════
-local function startVoid()
-    if VoidState.Conn then VoidState.Conn:Disconnect(); VoidState.Conn = nil end
-    task.spawn(function()
-        local hrp = getHRP()
-        if hrp then pcall(function() hrp:SetNetworkOwner(LP) end) end
-        task.spawn(updateGroundY)
-    end)
-    local hrp = getHRP()
-    if hrp then
-        local pos = hrp.Position
-        VoidState.X              = pos.X
-        VoidState.Z              = pos.Z
-        VoidState.IntendedPos    = Vector3.new(pos.X, CFG.Void.YBase, pos.Z)
-        VoidState.SpoofBaseX     = pos.X
-        VoidState.SpoofBaseZ     = pos.Z
-        VoidState.LastPos        = pos
-        VoidState.LastWrittenPos = pos
-    end
-    refreshSeizurePool()
-    initEchoHistory()
-    VoidState.Active = true
-    VoidState.Conn   = RunService.Heartbeat:Connect(function(dt)
-        if not CFG.Void.On then
-            VoidState.Conn:Disconnect()
-            VoidState.Conn   = nil
-            VoidState.Active = false
-            return
-        end
-        VoidState.Elapsed = VoidState.Elapsed + dt
-        lockToVoid(dt)
+local function triggerExplosion(position, size, pitchVariance)
+    if not ExplosionEffectFn then return end
+    pcall(function()
+        ExplosionEffectFn(
+            position or Vector3.new(0,0,0),
+            size or Config.ExplosionEffect.Size,
+            pitchVariance or (0.9 + Config.ExplosionEffect.SpeedVariance * math.random())
+        )
     end)
 end
 
-local function stopVoid()
-    if VoidState.Conn then VoidState.Conn:Disconnect(); VoidState.Conn = nil end
-    VoidState.Active = false
-    local hrp = getHRP()
-    if hrp then
-        pcall(function()
-            hrp.CFrame = CFrame.new(VoidState.SpoofBaseX, VoidState.GroundY + 5, VoidState.SpoofBaseZ)
-            hrp.AssemblyLinearVelocity = Vector3.zero
+local function hookPlayerForExplosion(player)
+    if player == LocalPlayer then return end
+    local function watchChar(char)
+        local hum = char:WaitForChild("Humanoid", 5)
+        if not hum then return end
+        local conn = hum.Died:Connect(function()
+            if not Config.ExplosionEffect.Enabled then return end
+            if not Config.ExplosionEffect.OnDeath then return end
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then triggerExplosion(root.Position, Config.ExplosionEffect.Size) end
         end)
+        table.insert(explosionDeathConnections, conn)
     end
-    if CFG.GhostMode.On then applyGhostMode(false) end
+    if player.Character then task.spawn(watchChar, player.Character) end
+    local conn = player.CharacterAdded:Connect(function(char) task.spawn(watchChar, char) end)
+    table.insert(explosionDeathConnections, conn)
 end
 
--- ═══════════════════════════════════════════
--- ANTI SPEC LOOP
--- ═══════════════════════════════════════════
-RunService.Heartbeat:Connect(function()
-    if CFG.AntiSpec.On then checkAntiSpec() end
-end)
+for _, p in ipairs(Players:GetPlayers()) do hookPlayerForExplosion(p) end
+Players.PlayerAdded:Connect(hookPlayerForExplosion)
 
--- ═══════════════════════════════════════════
--- HIT NUMBERS
--- ═══════════════════════════════════════════
-local hitNumberGui = Instance.new("ScreenGui")
-hitNumberGui.Name           = "HitNumbers_LE"
-hitNumberGui.ResetOnSpawn   = false
-hitNumberGui.IgnoreGuiInset = true
-hitNumberGui.Parent         = LP:WaitForChild("PlayerGui")
-
-local function showHit(amount)
-    if not CFG.HitNumbers.On then return end
-    local label = Instance.new("TextLabel")
-    label.BackgroundTransparency = 1
-    label.AutomaticSize          = Enum.AutomaticSize.XY
-    label.Text                   = tostring(math.floor(amount + 0.5))
-    label.Font                   = Enum.Font.Jura
-    label.TextColor3             = CFG.HitNumbers.Color
-    label.TextSize               = 50
-    label.TextStrokeTransparency = 0
-    label.TextStrokeColor3       = Color3.new(0, 0, 0)
-    label.TextTransparency       = 1
-    label.Position               = UDim2.new(0.5, math.random(-180, 180), 0.45, math.random(-120, 120))
-    label.AnchorPoint            = Vector2.new(0.5, 0.5)
-    label.Parent                 = hitNumberGui
-    TweenService:Create(label, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
-    task.delay(CFG.HitNumbers.Duration, function()
-        TweenService:Create(label, TweenInfo.new(1), {TextTransparency = 1}):Play()
-        task.wait(1); label:Destroy()
-    end)
-end
-
-local function setupHumanoid(hum2)
-    local lastHealth = hum2.Health
-    hum2.HealthChanged:Connect(function(newHealth)
-        local dmg = lastHealth - newHealth
-        if dmg > 0.1 then showHit(dmg) end
-        lastHealth = newHealth
-    end)
-end
-
-Players.PlayerAdded:Connect(function(plr)
-    plr.CharacterAdded:Connect(function(char)
-        local hum = char:WaitForChild("Humanoid")
-        if hum then setupHumanoid(hum) end
-    end)
-end)
-for _, plr in ipairs(Players:GetPlayers()) do
-    if plr.Character then
-        local hum = plr.Character:FindFirstChild("Humanoid")
-        if hum then setupHumanoid(hum) end
-    end
-end
-
--- ═══════════════════════════════════════════
--- CROSSHAIR
--- ═══════════════════════════════════════════
-if LP.PlayerGui:FindFirstChild("CustomCrosshair_LE") then
-    LP.PlayerGui.CustomCrosshair_LE:Destroy()
-end
-local crosshairGui = Instance.new("ScreenGui")
-crosshairGui.Name           = "CustomCrosshair_LE"
-crosshairGui.ResetOnSpawn   = false
-crosshairGui.IgnoreGuiInset = true
-crosshairGui.Parent         = LP:WaitForChild("PlayerGui")
-local crosshairImg = Instance.new("ImageLabel", crosshairGui)
-crosshairImg.BackgroundTransparency = 1
-crosshairImg.AnchorPoint            = Vector2.new(0.5, 0.5)
-crosshairImg.Position               = UDim2.new(0.5, 0, 0.5, 0)
-crosshairImg.Size                   = UDim2.new(0, 24, 0, 24)
-crosshairImg.Image                  = "rbxassetid://97119437608195"
-crosshairImg.ImageTransparency      = 1
-
--- ═══════════════════════════════════════════
--- ESP
--- ═══════════════════════════════════════════
-local espObjects = {}
-
-local function removeESP(p)
-    if espObjects[p] then
-        for _, obj in pairs(espObjects[p]) do
-            pcall(function() obj:Remove() end)
+local function startLoopExplosions()
+    if loopExplosionTask then return end
+    loopExplosionTask = task.spawn(function()
+        while Config.ExplosionEffect.Enabled and Config.ExplosionEffect.LoopExplosions do
+            pcall(function()
+                local char = LocalPlayer.Character
+                if char then
+                    local root = char:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        triggerExplosion(root.Position + Vector3.new(math.random(-5,5),math.random(0,3),math.random(-5,5)), Config.ExplosionEffect.Size * 0.5)
+                    end
+                end
+            end)
+            task.wait(Config.ExplosionEffect.LoopInterval)
         end
-        espObjects[p] = nil
+        loopExplosionTask = nil
+    end)
+end
+
+local function stopLoopExplosions()
+    if loopExplosionTask then task.cancel(loopExplosionTask); loopExplosionTask = nil end
+end
+
+local function explodeAtSelf()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if root then triggerExplosion(root.Position, Config.ExplosionEffect.Size) end
+end
+
+local function explodeAtEnemy()
+    local enemy = GetClosestEnemy()
+    if enemy and enemy.Character then
+        local root = enemy.Character:FindFirstChild("HumanoidRootPart")
+        if root then triggerExplosion(root.Position, Config.ExplosionEffect.Size) end
     end
 end
 
-local function buildESP(p)
-    if not CFG.ESP.On then return end
-    if p == LP then return end
-    removeESP(p)
-    local objs = {}
-
-    -- Box
-    local box = Drawing.new("Square")
-    box.Visible     = false
-    box.Color       = Color3.fromRGB(255, 50, 50)
-    box.Thickness   = 1.5
-    box.Filled      = false
-    box.Transparency = 1
-    objs.box = box
-
-    -- Name
-    local nameLabel = Drawing.new("Text")
-    nameLabel.Visible  = false
-    nameLabel.Color    = Color3.fromRGB(255, 255, 255)
-    nameLabel.Size     = 14
-    nameLabel.Center   = true
-    nameLabel.Outline  = true
-    nameLabel.Text     = p.Name
-    objs.name = nameLabel
-
-    -- HP bar (line)
-    local hpBar = Drawing.new("Line")
-    hpBar.Visible    = false
-    hpBar.Color      = Color3.fromRGB(50, 255, 50)
-    hpBar.Thickness  = 2
-    objs.hp = hpBar
-
-    -- Dist
-    local distLabel = Drawing.new("Text")
-    distLabel.Visible = false
-    distLabel.Color   = Color3.fromRGB(200, 200, 200)
-    distLabel.Size    = 12
-    distLabel.Center  = true
-    distLabel.Outline = true
-    objs.dist = distLabel
-
-    espObjects[p] = objs
+-- ═══════════════════════════════════════════
+-- TRACER EFFECTS
+-- ═══════════════════════════════════════════
+local function playTracer(fromPos, toPos, color, width, duration)
+    if not TracerEffectModule then return end
+    pcall(function()
+        TracerEffectModule:Play(fromPos, toPos, color or Config.TracerEffect.Color, width or Config.TracerEffect.Width, duration or Config.TracerEffect.Duration)
+    end)
 end
 
-local function updateESP()
-    if not CFG.ESP.On then
-        for p, _ in pairs(espObjects) do removeESP(p) end
+local function startTracerShootHook()
+    for _, conn in ipairs(tracerConnections) do pcall(function() conn:Disconnect() end) end
+    tracerConnections = {}
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    local function hookTool(tool)
+        local conn = tool.Activated:Connect(function()
+            if not Config.TracerEffect.Enabled then return end
+            if not Config.TracerEffect.OnShoot then return end
+            pcall(function()
+                local myRoot = char:FindFirstChild("HumanoidRootPart")
+                if not myRoot then return end
+                local toPos
+                if Config.TracerEffect.TraceToEnemy then
+                    local enemy = GetClosestEnemy()
+                    if enemy and enemy.Character then
+                        local eRoot = enemy.Character:FindFirstChild("HumanoidRootPart")
+                        if eRoot then toPos = eRoot.Position end
+                    end
+                else
+                    local cam = Workspace.CurrentCamera
+                    toPos = cam.CFrame.Position + cam.CFrame.LookVector * 200
+                end
+                if toPos then playTracer(myRoot.Position, toPos) end
+            end)
+        end)
+        table.insert(tracerConnections, conn)
+    end
+
+    for _, child in ipairs(char:GetChildren()) do
+        if child:IsA("Tool") then hookTool(child) end
+    end
+    local conn = char.ChildAdded:Connect(function(child)
+        if child:IsA("Tool") then hookTool(child) end
+    end)
+    table.insert(tracerConnections, conn)
+end
+
+local function stopTracers()
+    for _, conn in ipairs(tracerConnections) do pcall(function() conn:Disconnect() end) end
+    tracerConnections = {}
+end
+
+local function drawManualTracer()
+    local myChar = LocalPlayer.Character
+    if not myChar then return end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+    local enemy = GetClosestEnemy()
+    if not enemy or not enemy.Character then Library:Notify("No enemy found for tracer", 2); return end
+    local eRoot = enemy.Character:FindFirstChild("HumanoidRootPart")
+    if not eRoot then return end
+    playTracer(myRoot.Position, eRoot.Position)
+    Library:Notify("Tracer drawn to " .. enemy.Name, 2)
+end
+
+-- ═══════════════════════════════════════════
+-- ANIMATION SPOOF
+-- ═══════════════════════════════════════════
+local function playAnimation(animId, looped, speed)
+    if PlayAnimFn then
+        pcall(function() PlayAnimFn(animId, looped, speed) end)
         return
     end
-    local cam = workspace.CurrentCamera
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p == LP then continue end
-        if CFG.ESP.TeamCheck and isSameTeam(p) then
-            removeESP(p); continue
-        end
-        if not espObjects[p] then buildESP(p) end
-        local objs = espObjects[p]
-        if not objs then continue end
-
-        local char = p.Character
-        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-        local hum  = char and char:FindFirstChildOfClass("Humanoid")
-        local head = char and char:FindFirstChild("Head")
-
-        if not hrp or not hum or not head then
-            for _, obj in pairs(objs) do pcall(function() obj.Visible = false end) end
-            continue
-        end
-
-        local dist = (hrp.Position - (getHRP() and getHRP().Position or Vector3.zero)).Magnitude
-        if dist > CFG.ESP.MaxDist then
-            for _, obj in pairs(objs) do pcall(function() obj.Visible = false end) end
-            continue
-        end
-
-        -- Project corners of a rough bounding box
-        local topPos    = head.Position + Vector3.new(0, 1.5, 0)
-        local bottomPos = hrp.Position  - Vector3.new(0, 3,   0)
-
-        local topSP,    topOn    = cam:WorldToViewportPoint(topPos)
-        local bottomSP, bottomOn = cam:WorldToViewportPoint(bottomPos)
-
-        if not topOn and not bottomOn then
-            for _, obj in pairs(objs) do pcall(function() obj.Visible = false end) end
-            continue
-        end
-
-        local x1 = math.min(topSP.X, bottomSP.X) - 20
-        local y1 = topSP.Y
-        local x2 = math.max(topSP.X, bottomSP.X) + 20
-        local y2 = bottomSP.Y
-        local w  = x2 - x1
-        local h  = y2 - y1
-
-        -- Box
-        if CFG.ESP.ShowBox and objs.box then
-            objs.box.Position    = Vector2.new(x1, y1)
-            objs.box.Size        = Vector2.new(w, h)
-            objs.box.Visible     = true
-        end
-
-        -- Name
-        if CFG.ESP.ShowName and objs.name then
-            objs.name.Position = Vector2.new((x1+x2)/2, y1 - 16)
-            objs.name.Text     = p.Name
-            objs.name.Visible  = true
-        end
-
-        -- HP bar
-        if CFG.ESP.ShowHP and objs.hp then
-            local hpPct  = clamp(hum.Health / hum.MaxHealth, 0, 1)
-            local barH   = h * hpPct
-            local barX   = x1 - 5
-            objs.hp.From    = Vector2.new(barX, y2)
-            objs.hp.To      = Vector2.new(barX, y2 - barH)
-            objs.hp.Color   = Color3.fromRGB(
-                math.floor((1-hpPct)*255),
-                math.floor(hpPct*255),
-                0
-            )
-            objs.hp.Visible = true
-        end
-
-        -- Distance
-        if CFG.ESP.ShowDist and objs.dist then
-            objs.dist.Position = Vector2.new((x1+x2)/2, y2 + 2)
-            objs.dist.Text     = string.format("%.0f", dist)
-            objs.dist.Visible  = true
-        end
-    end
-end
-
-RunService.RenderStepped:Connect(updateESP)
-
-Players.PlayerRemoving:Connect(function(p) removeESP(p) end)
-Players.PlayerAdded:Connect(function(p)
-    p.CharacterAdded:Connect(function() buildESP(p) end)
-end)
-
--- ═══════════════════════════════════════════
--- KILL NOTIFIER
--- ═══════════════════════════════════════════
-local watchedHumanoids = {}
-local function watchPlayer(p)
-    if not p or p == LP then return end
-    local function hookChar(char)
+    pcall(function()
+        local char = LocalPlayer.Character
         if not char then return end
         local hum = char:FindFirstChildOfClass("Humanoid")
-            or char:WaitForChild("Humanoid", 5)
-        if not hum or watchedHumanoids[hum] then return end
-        watchedHumanoids[hum] = true
-        hum.Died:Connect(function()
-            if CFG.KillNotifier then
-                CFG.Stats.KillCount = CFG.Stats.KillCount + 1
-                Library:Notify("☠ Eliminated " .. p.Name, 3)
-                if CFG.KillSound then
-                    pcall(function()
-                        local snd = Instance.new("Sound", workspace)
-                        snd.SoundId            = "rbxassetid://4764109000"
-                        snd.Volume             = 0.4
-                        snd.RollOffMaxDistance = 0
-                        snd:Play()
-                        Debris:AddItem(snd, 2)
-                    end)
+        if not hum then return end
+        local animator = hum:FindFirstChildOfClass("Animator") or Instance.new("Animator", hum)
+        if activeAnimTrack then pcall(function() activeAnimTrack:Stop() end); activeAnimTrack = nil end
+        local anim = Instance.new("Animation")
+        anim.AnimationId = "rbxassetid://" .. tostring(animId):gsub("[^%d]","")
+        local track = animator:LoadAnimation(anim)
+        track.Looped = looped or false
+        track:AdjustSpeed(speed or 1)
+        track:Play()
+        activeAnimTrack = track
+        anim:Destroy()
+    end)
+end
+
+local function stopAnimation()
+    if activeAnimTrack then pcall(function() activeAnimTrack:Stop() end); activeAnimTrack = nil end
+end
+
+-- ═══════════════════════════════════════════
+-- MOBILE CONTROLLER
+-- ═══════════════════════════════════════════
+local function applyMobileControllerSettings()
+    if not MobileController then Library:Notify("MobileController not loaded", 3); return end
+    pcall(function()
+        if Config.MobileCtrl.ForceEnableMobile then
+            if MobileController.Enable then MobileController:Enable() end
+            if MobileController.SetEnabled then MobileController:SetEnabled(true) end
+            local CONSTANTS = safeRequire(ReplicatedStorage.Modules.CONSTANTS)
+            if CONSTANTS then rawset(CONSTANTS,"IS_MOBILE",true); rawset(CONSTANTS,"IS_MOBILE_SERVER",true) end
+        else
+            if MobileController.Disable then MobileController:Disable() end
+            if MobileController.SetEnabled then MobileController:SetEnabled(false) end
+        end
+    end)
+    pcall(function()
+        if Config.MobileCtrl.DisableMobilePrompts then
+            for _, tag in ipairs(CollectionService:GetTagged("LobbyMobileDuelsPrompt")) do
+                local model = tag:FindFirstChild("Model")
+                if model then model.Parent = nil end
+            end
+        end
+    end)
+end
+
+-- ═══════════════════════════════════════════
+-- RELOAD SPEED
+-- ═══════════════════════════════════════════
+local reloadPatchedOriginals = {}
+
+local function applyReloadPatch()
+    pcall(function()
+        local ItemLibrary = require(ReplicatedStorage.Modules.ItemLibrary)
+        local Items       = rawget(ItemLibrary, "Items")
+        if not Items then return end
+        for _, Item in Items do
+            local Name = Item.Name
+            if not table.find(Config.Weapons.Whitelist, Name) then continue end
+            if not Item["ReloadLength"] then continue end
+            if not reloadPatchedOriginals[Name] then reloadPatchedOriginals[Name] = Item.ReloadLength end
+            if Config.Weapons.ReloadSpeedEnabled then
+                rawset(Item, "ReloadLength",
+                    Name == "Daggers" and math.max(Config.Weapons.ReloadLength, 0.09) or Config.Weapons.ReloadLength
+                )
+            else
+                rawset(Item, "ReloadLength", reloadPatchedOriginals[Name])
+            end
+        end
+    end)
+end
+
+-- ═══════════════════════════════════════════
+-- RAKNET HOOK
+-- ═══════════════════════════════════════════
+local raknetHookActive = false
+local raknetHookRef    = nil
+
+local function startRakNetHook()
+    if raknetHookActive then return end
+    local ok = pcall(function()
+        raknetHookRef = function(packet)
+            if packet.PacketId == 0x1B then
+                local data = packet.AsBuffer
+                buffer.writeu32(data, 1, 0xFFFFFFFF)
+                packet:SetData(data)
+            end
+        end
+        raknet.add_send_hook(raknetHookRef)
+        raknetHookActive = true
+    end)
+    if not ok then Library:Notify("RakNet hook failed", 4); Config.RakNet.Enabled = false end
+end
+
+local function stopRakNetHook()
+    if not raknetHookActive then return end
+    pcall(function() if raknetHookRef then raknet.remove_send_hook(raknetHookRef) end end)
+    raknetHookActive = false; raknetHookRef = nil
+end
+
+-- ═══════════════════════════════════════════
+-- AUTO COLLECT
+-- ═══════════════════════════════════════════
+Connections.AutoCollect = RunService.RenderStepped:Connect(function()
+    if not Config.AutoCollect.Enabled then return end
+    pcall(function()
+        local character = LocalPlayer.Character
+        if not character then return end
+        local myHrp   = character:FindFirstChild("HumanoidRootPart")
+        if not myHrp then return end
+        local humanoid    = character:FindFirstChild("Humanoid")
+        local needsHealth = humanoid and humanoid.Health < humanoid.MaxHealth
+        for _, obj in ipairs(Workspace:GetChildren()) do
+            if obj.Name == "_drop" and obj:IsA("BasePart") then
+                local wantHealth = Config.AutoCollect.CollectHealth and obj:FindFirstChild("Health") and needsHealth
+                local wantAmmo   = Config.AutoCollect.CollectAmmo   and obj:FindFirstChild("Ammo")
+                if wantHealth or wantAmmo then
+                    firetouchinterest(myHrp, obj, 0)
+                    firetouchinterest(myHrp, obj, 1)
                 end
             end
-            watchedHumanoids[hum] = nil
-        end)
-    end
-    if p.Character then task.spawn(hookChar, p.Character) end
-    p.CharacterAdded:Connect(hookChar)
-end
-for _, p in ipairs(Players:GetPlayers()) do watchPlayer(p) end
-Players.PlayerAdded:Connect(watchPlayer)
-
--- ═══════════════════════════════════════════════════
--- PRESET CONFIGS (applied in Settings tab)
--- ═══════════════════════════════════════════════════
-
--- Preset 1: "Max Rage" — maximum chaos, seizure, triple flicker, full evasion
-local function applyPreset_MaxRage()
-    CFG.Void.Method           = "Seizure"
-    CFG.Bypass.Mode           = "Adaptive"
-    CFG.Desync.On             = true
-    CFG.Desync.TripleFlicker  = true
-    CFG.Desync.BaitMode       = true
-    CFG.Desync.Tick           = 0.10
-    CFG.Evade.On              = true
-    CFG.Evade.ProjDetect      = true
-    CFG.ChaosMode.On          = false
-    CFG.Bypass.Jitter         = true
-    CFG.Bypass.JitterScale    = 100
-    CFG.Bypass.AntiCorrect    = true
-    CFG.Bypass.NetworkPulse   = true
-    CFG.Bypass.PulseStrength  = 5e7
-    refreshSeizurePool()
-    Library:Notify("Max Rage preset applied — Seizure + Triple Flicker + Bait + Full Evasion", 4)
-end
-
--- Preset 2: "Ghost Drift" — stable silent drift, ghost mode, no chaos, subtle
-local function applyPreset_GhostDrift()
-    CFG.Void.Method           = "Drift"
-    CFG.Bypass.Mode           = "Clean CFrame"
-    CFG.Desync.On             = true
-    CFG.Desync.TripleFlicker  = false
-    CFG.Desync.BaitMode       = false
-    CFG.Desync.Tick           = 0.25
-    CFG.Evade.On              = true
-    CFG.Evade.ProjDetect      = true
-    CFG.ChaosMode.On          = false
-    CFG.GhostMode.On          = true
-    CFG.Bypass.Jitter         = false
-    CFG.Bypass.JitterScale    = 10
-    CFG.Bypass.AntiCorrect    = true
-    CFG.Bypass.NetworkPulse   = false
-    applyGhostMode(true)
-    Library:Notify("Ghost Drift preset applied — Drift + Ghost Mode + Clean CFrame", 4)
-end
-
--- ═══════════════════════════════════════════════════
--- UI TABS
--- ═══════════════════════════════════════════════════
-
--- ══════════════════════
--- VOID TAB
--- ══════════════════════
-local V_L = Tabs.Void:AddLeftGroupbox("Void Control")
-local V_R = Tabs.Void:AddRightGroupbox("Void Parameters")
-local V_M = Tabs.Void:AddLeftGroupbox("Method Settings")
-local V_N = Tabs.Void:AddRightGroupbox("v1.2+ Methods")
-
-V_L:AddToggle("VoidOn", {Text="Enable Voidspam", Default=false, Callback=function(v)
-    CFG.Void.On = v
-    if v then startVoid() else stopVoid() end
-end})
-V_L:AddLabel("Adaptive bypass auto-selects best mode per method")
-V_L:AddDropdown("VoidMethod", {
-    Text    = "Void Method",
-    Default = "Quantum Tunneling",
-    Values  = allMethods,
-    Callback = function(v)
-        CFG.Void.Method = v
-        if v == "Seizure" then refreshSeizurePool() end
-        if v == "Echo"    then initEchoHistory()   end
-    end,
-})
-V_L:AddToggle("ChaosModeOn", {Text="Chaos Mode (auto-rotate methods)", Default=false, Callback=function(v)
-    CFG.ChaosMode.On = v
-end})
-V_L:AddSlider("ChaosInterval", {Text="Chaos Interval (s)", Default=8, Min=1, Max=30, Rounding=1, Callback=function(v)
-    CFG.ChaosMode.Interval = v * 0.1
-end})
-V_L:AddButton({Text="Refresh Seizure Pool", Func=function()
-    refreshSeizurePool()
-    Library:Notify("64 new Seizure positions generated", 3)
-end})
-
-V_R:AddSlider("VoidDriftSpeed", {Text="Drift Speed (M/s)", Default=9, Min=1, Max=200, Rounding=0, Callback=function(v)
-    CFG.Void.DriftSpeed = v * 1e6
-end})
-V_R:AddSlider("VoidDriftChaos", {Text="Drift Chaos %", Default=98, Min=1, Max=100, Rounding=0, Callback=function(v)
-    CFG.Void.DriftChaos = v * 0.01
-end})
-V_R:AddSlider("VoidAltitude", {Text="Void Altitude (B)", Default=10, Min=1, Max=1000, Rounding=0, Callback=function(v)
-    CFG.Void.YBase = v * 1e9
-end})
-V_R:AddSlider("VoidYDriftRange", {Text="Y Drift Range (B)", Default=2, Min=0, Max=10, Rounding=0, Callback=function(v)
-    CFG.Void.YDriftRange = v * 1e9
-end})
-V_R:AddSlider("VoidLissA", {Text="Lissajous A", Default=2, Min=1, Max=10, Rounding=0, Callback=function(v)
-    CFG.LissajousA = v
-end})
-V_R:AddSlider("VoidLissB", {Text="Lissajous B", Default=3, Min=1, Max=10, Rounding=0, Callback=function(v)
-    CFG.LissajousB = v
-end})
-V_R:AddSlider("VoidGravity", {Text="Gravity Well (M)", Default=100, Min=1, Max=1000, Rounding=0, Callback=function(v)
-    CFG.GravityStr = v * 1e6
-end})
-V_R:AddSlider("VoidFlicker", {Text="Flicker Interval (ms)", Default=5, Min=1, Max=50, Rounding=0, Callback=function(v)
-    CFG.FlickerInterval = v * 0.01
-end})
-
-V_M:AddLabel("Anti-Rager Methods")
-V_M:AddSlider("SeizureSpeed", {Text="Seizure Speed", Default=50, Min=1, Max=200, Rounding=0, Callback=function(v)
-    CFG.SeizureSpeed = v
-end})
-V_M:AddSlider("HyperdriveSpeed", {Text="Hyperdrive Speed", Default=20, Min=1, Max=100, Rounding=0, Callback=function(v)
-    CFG.HyperdriveSpeed = v
-end})
-V_M:AddSlider("GlitchLayers", {Text="Glitch Layers", Default=5, Min=1, Max=8, Rounding=0, Callback=function(v)
-    CFG.GlitchLayers = v
-end})
-V_M:AddSlider("RiftPhase", {Text="Rift Phase", Default=3, Min=2, Max=9, Rounding=0, Callback=function(v)
-    CFG.RiftPhase = v
-end})
-
-V_N:AddLabel("Wormhole · Phantom · Supernova")
-V_N:AddLabel("Mirror · Pulse Wave · Echo · Singularity · Storm Cell")
-V_N:AddSlider("WormholeCount", {Text="Wormhole Exits", Default=6, Min=2, Max=12, Rounding=0, Callback=function(v)
-    CFG.WormholeCount = v
-end})
-V_N:AddSlider("PhantomLayers", {Text="Phantom Layers", Default=4, Min=2, Max=8, Rounding=0, Callback=function(v)
-    CFG.PhantomLayers = v
-end})
-V_N:AddSlider("StormRadius", {Text="Storm Radius (x10)", Default=50, Min=1, Max=100, Rounding=0, Callback=function(v)
-    CFG.StormRadius = v * 1e10
-end})
-V_N:AddSlider("CollapseSpeed", {Text="Collapse Speed", Default=8, Min=1, Max=20, Rounding=0, Callback=function(v)
-    CFG.CollapseSpeed = v
-end})
-V_N:AddSlider("PulseWaveFreq", {Text="Pulse Wave Freq", Default=7, Min=1, Max=20, Rounding=0, Callback=function(v)
-    CFG.PulseWaveFreq = v
-end})
-V_N:AddSlider("EchoDelay", {Text="Echo Delay (frames)", Default=10, Min=1, Max=30, Rounding=0, Callback=function(v)
-    CFG.EchoDelay = v / 60
-end})
-V_N:AddToggle("MirrorAxes", {Text="Mirror All Axes", Default=true, Callback=function(v)
-    CFG.MirrorAxes = v
-end})
-
--- ══════════════════════
--- BYPASS TAB
--- ══════════════════════
-local BP_L = Tabs.Bypass:AddLeftGroupbox("Bypass Mode")
-local BP_R = Tabs.Bypass:AddRightGroupbox("Advanced Options")
-local BP_I = Tabs.Bypass:AddLeftGroupbox("Mode Guide")
-
-BP_L:AddDropdown("BypassMode", {
-    Text    = "Bypass Mode",
-    Default = "Adaptive",
-    Values  = {"Adaptive","Extreme Networking","Clean CFrame","Velocity","Hybrid","Physics Chaos","Multi-Write","Momentum Carry"},
-    Callback = function(v)
-        CFG.Bypass.Mode = v
-    end,
-})
-BP_L:AddSlider("BypassAdaptSens", {Text="Adaptive Sensitivity %", Default=70, Min=1, Max=100, Rounding=0, Callback=function(v)
-    CFG.Bypass.AdaptiveSensitivity = v * 0.01
-end})
-BP_L:AddToggle("BypassPulse", {Text="Network Pulse", Default=true, Callback=function(v)
-    CFG.Bypass.NetworkPulse = v
-end})
-BP_L:AddSlider("BypassPulseRate", {Text="Pulse Rate (1/N frames)", Default=8, Min=1, Max=30, Rounding=0, Callback=function(v)
-    CFG.Bypass.PulseRate = v
-end})
-BP_L:AddSlider("BypassPulseStr", {Text="Pulse Strength (M)", Default=20, Min=1, Max=100, Rounding=0, Callback=function(v)
-    CFG.Bypass.PulseStrength = v * 1e6
-end})
-
-BP_R:AddToggle("BypassAntiCorrect", {Text="Anti-Correction", Default=true, Callback=function(v)
-    CFG.Bypass.AntiCorrect = v
-end})
-BP_R:AddSlider("BypassAntiCorrectStr", {Text="Anti-Correct Strength", Default=3, Min=1, Max=10, Rounding=0, Callback=function(v)
-    CFG.Bypass.AntiCorrectStr = v
-end})
-BP_R:AddToggle("BypassMultiWrite", {Text="Multi-Write", Default=false, Callback=function(v)
-    CFG.Bypass.MultiWrite = v
-end})
-BP_R:AddSlider("BypassMultiWriteCount", {Text="Multi-Write Count", Default=3, Min=2, Max=8, Rounding=0, Callback=function(v)
-    CFG.Bypass.MultiWriteCount = v
-end})
-BP_R:AddToggle("BypassMomentum", {Text="Momentum Carry", Default=false, Callback=function(v)
-    CFG.Bypass.Momentum = v
-end})
-BP_R:AddSlider("BypassMomentumDecay", {Text="Momentum Decay %", Default=85, Min=1, Max=99, Rounding=0, Callback=function(v)
-    CFG.Bypass.MomentumDecay = v * 0.01
-end})
-BP_R:AddToggle("BypassJitter", {Text="Position Jitter", Default=true, Callback=function(v)
-    CFG.Bypass.Jitter = v
-end})
-BP_R:AddSlider("BypassJitterScale", {Text="Jitter Scale (studs)", Default=50, Min=1, Max=500, Rounding=0, Callback=function(v)
-    CFG.Bypass.JitterScale = v
-end})
-
-BP_I:AddLabel("Adaptive     → auto per method ✓ best")
-BP_I:AddLabel("Extreme Net  → all methods, max force")
-BP_I:AddLabel("Clean CFrame → smooth orbit methods")
-BP_I:AddLabel("Physics Chaos→ teleport methods")
-BP_I:AddLabel("Multi-Write  → flip methods (Schrodinger)")
-BP_I:AddLabel("Momentum     → slow drift methods")
-BP_I:AddLabel("Velocity     → most subtle, slowest")
-
--- ══════════════════════
--- DESYNC TAB
--- ══════════════════════
-local DS_L = Tabs.Desync:AddLeftGroupbox("Desync Settings")
-local DS_R = Tabs.Desync:AddRightGroupbox("Bait Mode")
-local DS_I = Tabs.Desync:AddLeftGroupbox("Info")
-
-DS_L:AddToggle("DesyncOn", {Text="Enable Desync", Default=true, Callback=function(v)
-    CFG.Desync.On = v
-end})
-DS_L:AddSlider("DesyncTick", {Text="Desync Rate (x0.01s)", Default=18, Min=1, Max=100, Rounding=0, Callback=function(v)
-    CFG.Desync.Tick = v * 0.01
-end})
-DS_L:AddSlider("DesyncRadius", {Text="Spoof Radius (studs)", Default=22, Min=1, Max=100, Rounding=0, Callback=function(v)
-    CFG.Desync.Radius = v
-end})
-DS_L:AddSlider("DesyncWanderSpeed", {Text="Wander Speed", Default=35, Min=1, Max=100, Rounding=0, Callback=function(v)
-    CFG.Desync.WanderSpeed = v * 0.1
-end})
-DS_L:AddSlider("DesyncWanderChaos", {Text="Wander Chaos %", Default=40, Min=1, Max=100, Rounding=0, Callback=function(v)
-    CFG.Desync.WanderChaos = v * 0.01
-end})
-DS_L:AddToggle("DesyncTriple", {Text="Triple Flicker", Default=false, Callback=function(v)
-    CFG.Desync.TripleFlicker = v
-end})
-
-DS_R:AddLabel("Moves spoof position toward nearest enemy")
-DS_R:AddLabel("Makes enemies shoot at your fake hitbox")
-DS_R:AddToggle("DesyncBait", {Text="Enable Bait Mode", Default=false, Callback=function(v)
-    CFG.Desync.BaitMode = v
-end})
-DS_R:AddSlider("DesyncBaitOffset", {Text="Bait Offset (studs)", Default=15, Min=1, Max=50, Rounding=0, Callback=function(v)
-    CFG.Desync.BaitOffset = v
-end})
-
-DS_I:AddLabel("Flickers HRP to ground-level briefly.")
-DS_I:AddLabel("Server hitbox splits from client visual.")
-DS_I:AddLabel("Triple flicker = 3x split per cycle.")
-DS_I:AddLabel("Bait mode lures enemy shots to fake pos.")
-
--- ══════════════════════
--- EVASION TAB
--- ══════════════════════
-local EV_L = Tabs.Evasion:AddLeftGroupbox("Void Evasion")
-local EV_R = Tabs.Evasion:AddRightGroupbox("Projectile Detection")
-local EV_A = Tabs.Evasion:AddLeftGroupbox("Advanced")
-
-EV_L:AddToggle("EvadeOn", {Text="Enable Evasion", Default=true, Callback=function(v)
-    CFG.Evade.On = v
-end})
-EV_L:AddSlider("EvadeRadius", {Text="Evasion Radius (B)", Default=8, Min=1, Max=50, Rounding=0, Callback=function(v)
-    CFG.Evade.Radius = v * 1e9
-end})
-EV_L:AddSlider("EvadeSpeed", {Text="Evasion Speed (B)", Default=6, Min=1, Max=50, Rounding=0, Callback=function(v)
-    CFG.Evade.Speed = v * 1e9
-end})
-EV_L:AddSlider("EvadeCooldown", {Text="Evasion Cooldown (ms)", Default=50, Min=1, Max=200, Rounding=0, Callback=function(v)
-    CFG.Evade.Cooldown = v * 0.001
-end})
-
-EV_R:AddLabel("Scans for fast-moving parts heading toward void pos")
-EV_R:AddToggle("EvadeProjDetect", {Text="Projectile Detection", Default=true, Callback=function(v)
-    CFG.Evade.ProjDetect = v
-end})
-EV_R:AddSlider("EvadeProjRange", {Text="Detection Range (studs)", Default=500, Min=50, Max=1000, Rounding=0, Callback=function(v)
-    CFG.Evade.ProjRange = v
-end})
-EV_R:AddSlider("EvadeProjSpeed", {Text="Min Projectile Speed", Default=80, Min=20, Max=500, Rounding=0, Callback=function(v)
-    CFG.Evade.ProjSpeed = v
-end})
-
-EV_A:AddSlider("EvadeVertical", {Text="Vertical Escape (B)", Default=3, Min=1, Max=50, Rounding=0, Callback=function(v)
-    CFG.Evade.Vertical = v * 1e9
-end})
-EV_A:AddSlider("EvadeVertBias", {Text="Vertical Bias %", Default=50, Min=0, Max=100, Rounding=0, Callback=function(v)
-    CFG.Evade.VertBias = v * 0.01
-end})
-EV_A:AddToggle("EvadeForceUp", {Text="Force Upward Escape", Default=false, Callback=function(v)
-    CFG.Evade.ForceUp = v
-end})
-
--- ══════════════════════
--- VISUALS TAB
--- ══════════════════════
-local VS_L = Tabs.Visuals:AddLeftGroupbox("Crosshair")
-local VS_R = Tabs.Visuals:AddRightGroupbox("Hit Numbers")
-local VS_E = Tabs.Visuals:AddLeftGroupbox("ESP")
-local VS_G = Tabs.Visuals:AddRightGroupbox("Ghost Mode")
-
-VS_L:AddToggle("CrossOn", {Text="Enable Crosshair", Default=false, Callback=function(v)
-    CFG.Crosshair.On = v
-    crosshairImg.ImageTransparency = v and 0 or 1
-    UIS.MouseIconEnabled = not v
-end})
-VS_L:AddSlider("CrossSize", {Text="Size", Default=24, Min=8, Max=64, Rounding=0, Callback=function(v)
-    CFG.Crosshair.Size = v
-    crosshairImg.Size = UDim2.new(0, v, 0, v)
-end})
-VS_L:AddButton({Text="Reset Crosshair Image", Func=function()
-    crosshairImg.Image = "rbxassetid://97119437608195"
-end})
-
-VS_R:AddToggle("HitNumOn", {Text="Enable Hit Numbers", Default=true, Callback=function(v)
-    CFG.HitNumbers.On = v
-end})
-VS_R:AddLabel("Color"):AddColorPicker("HitNumColor", {Default=Color3.fromRGB(255, 20, 147), Callback=function(v)
-    CFG.HitNumbers.Color = v
-end})
-VS_R:AddSlider("HitNumDur", {Text="Duration (s)", Default=5, Min=1, Max=10, Rounding=1, Callback=function(v)
-    CFG.HitNumbers.Duration = v
-end})
-
-VS_E:AddToggle("ESPOn", {Text="Enable ESP", Default=false, Callback=function(v)
-    CFG.ESP.On = v
-    if not v then
-        for p, _ in pairs(espObjects) do removeESP(p) end
-    else
-        for _, p in ipairs(Players:GetPlayers()) do buildESP(p) end
-    end
-end})
-VS_E:AddToggle("ESPBox", {Text="Show Box", Default=true, Callback=function(v)
-    CFG.ESP.ShowBox = v
-end})
-VS_E:AddToggle("ESPName", {Text="Show Name", Default=true, Callback=function(v)
-    CFG.ESP.ShowName = v
-end})
-VS_E:AddToggle("ESPHealth", {Text="Show HP Bar", Default=true, Callback=function(v)
-    CFG.ESP.ShowHP = v
-end})
-VS_E:AddToggle("ESPDist", {Text="Show Distance", Default=false, Callback=function(v)
-    CFG.ESP.ShowDist = v
-end})
-VS_E:AddToggle("ESPTeam", {Text="Team Check", Default=true, Callback=function(v)
-    CFG.ESP.TeamCheck = v
-end})
-VS_E:AddSlider("ESPMaxDist", {Text="Max Distance", Default=500, Min=50, Max=2000, Rounding=0, Callback=function(v)
-    CFG.ESP.MaxDist = v
-end})
-
-VS_G:AddLabel("Makes YOUR character transparent locally")
-VS_G:AddLabel("Useful for hiding yourself visually")
-VS_G:AddToggle("GhostModeOn", {Text="Enable Ghost Mode", Default=false, Callback=function(v)
-    CFG.GhostMode.On = v
-    applyGhostMode(v)
-end})
-VS_G:AddSlider("GhostTransparency", {Text="Transparency %", Default=95, Min=0, Max=99, Rounding=0, Callback=function(v)
-    CFG.GhostMode.Transparency = v * 0.01
-    if CFG.GhostMode.On then applyGhostMode(true) end
-end})
-
--- ══════════════════════
--- NOTIFIER TAB
--- ══════════════════════
-local NT_L = Tabs.Notifier:AddLeftGroupbox("Kill Notifier")
-local NT_R = Tabs.Notifier:AddRightGroupbox("Anti Spectator")
-local NT_P = Tabs.Notifier:AddLeftGroupbox("Position Logger")
-local NT_A = Tabs.Notifier:AddRightGroupbox("AC Bypass Status")
-
-NT_L:AddToggle("KillNotifOn", {Text="Enable Kill Notifier", Default=true, Callback=function(v)
-    CFG.KillNotifier = v
-end})
-NT_L:AddToggle("KillSoundOn", {Text="Kill Sound", Default=true, Callback=function(v)
-    CFG.KillSound = v
-end})
-NT_L:AddButton({Text="Test Notification", Func=function()
-    Library:Notify("☠ Eliminated TestPlayer", 3)
-end})
-
-NT_R:AddLabel("Detects when camera subject changes")
-NT_R:AddLabel("Scrambles position if spectator detected")
-NT_R:AddToggle("AntiSpecOn", {Text="Enable Anti-Spectator", Default=false, Callback=function(v)
-    CFG.AntiSpec.On = v
-end})
-
-NT_P:AddLabel("Logs your void XYZ to console at intervals")
-NT_P:AddToggle("PosLogOn", {Text="Enable Position Logger", Default=false, Callback=function(v)
-    CFG.PosLogger.On = v
-end})
-NT_P:AddSlider("PosLogInterval", {Text="Interval (s)", Default=2, Min=1, Max=10, Rounding=0, Callback=function(v)
-    CFG.PosLogger.Interval = v
-end})
-
-NT_A:AddLabel("AC Bypass: ACTIVE ✓")
-NT_A:AddLabel("Method: AnalyticsPipelineController GC hook")
-NT_A:AddLabel("All matching functions replaced with infinite yield")
-NT_A:AddLabel("Applied at startup — always on")
-
--- ══════════════════════
--- STATS TAB
--- ══════════════════════
-local ST_L = Tabs.Stats:AddLeftGroupbox("Live Statistics")
-local ST_R = Tabs.Stats:AddRightGroupbox("Method Info")
-
-local cyclesLabel     = ST_L:AddLabel("Void Cycles: 0")
-local killsLabel      = ST_L:AddLabel("Kills: 0")
-local evadedLabel     = ST_L:AddLabel("Projectiles Evaded: 0")
-local switchesLabel   = ST_L:AddLabel("Bypass Switches: 0")
-local bypassNowLabel  = ST_L:AddLabel("Current Bypass: Adaptive")
-local methodLabel     = ST_L:AddLabel("Current Method: -")
-local activeLabel     = ST_L:AddLabel("Void Active: NO")
-local groundYLabel    = ST_L:AddLabel("Ground Y: scanning...")
-local correctLabel    = ST_L:AddLabel("Server Corrections: 0")
-
-ST_L:AddButton({Text="Reset Stats", Func=function()
-    CFG.Stats.CycleCount        = 0
-    CFG.Stats.KillCount         = 0
-    CFG.Stats.ProjectilesEvaded = 0
-    CFG.Stats.BypassSwitches    = 0
-    VoidState.CorrectionCount   = 0
-    Library:Notify("Stats reset", 2)
-end})
-
-ST_R:AddLabel("Wormhole: cyclic exit network")
-ST_R:AddLabel("Phantom: ghost layer cycling")
-ST_R:AddLabel("Supernova: compress then explode")
-ST_R:AddLabel("Mirror: reflection flip")
-ST_R:AddLabel("Pulse Wave: outward sine pulse")
-ST_R:AddLabel("Echo: delayed position replay")
-ST_R:AddLabel("Singularity: gravitational collapse")
-ST_R:AddLabel("Storm Cell: 5-cell orbital switching")
-ST_R:AddLabel("Chaos Mode: auto-cycles all 33 methods")
-
-RunService.Heartbeat:Connect(function()
-    pcall(function()
-        cyclesLabel:SetText("Void Cycles: "        .. CFG.Stats.CycleCount)
-        killsLabel:SetText("Kills: "               .. CFG.Stats.KillCount)
-        evadedLabel:SetText("Projectiles Evaded: " .. CFG.Stats.ProjectilesEvaded)
-        switchesLabel:SetText("Bypass Switches: "  .. CFG.Stats.BypassSwitches)
-        bypassNowLabel:SetText("Current Bypass: "
-            .. (CFG.Bypass.Mode == "Adaptive" and VoidState.AdaptiveMode or CFG.Bypass.Mode))
-        methodLabel:SetText("Current Method: "     .. CFG.Void.Method)
-        activeLabel:SetText("Void Active: "        .. (VoidState.Active and "YES ⚡" or "NO"))
-        groundYLabel:SetText("Ground Y: "          .. math.floor(VoidState.GroundY))
-        correctLabel:SetText("Server Corrections: " .. VoidState.CorrectionCount)
+        end
     end)
 end)
 
--- ══════════════════════
--- SETTINGS TAB
--- ══════════════════════
-local SET_L = Tabs.Settings:AddLeftGroupbox("Presets")
-local SET_R = Tabs.Settings:AddRightGroupbox("Quick Actions")
-local SET_I = Tabs.Settings:AddLeftGroupbox("Info")
+-- ═══════════════════════════════════════════
+-- SAFETY
+-- ═══════════════════════════════════════════
+local function disableAll()
+    Config.VoidSpam.Enabled      = false
+    Config.PureDesync.Enabled    = false
+    Config.PulseDesync.Enabled   = false
+    Config.WeaponTracker.Enabled = false
+    Config.ProjectileTP.Enabled  = false
+    Config.AutoCollect.Enabled   = false
+    Config.ExplosionEffect.Enabled = false
+    Config.TracerEffect.Enabled  = false
+    disableRagebot()
+    if Config.RakNet.Enabled then stopRakNetHook(); Config.RakNet.Enabled = false end
+    stopWeaponTrackerHook()
+    stopLoopExplosions()
+    stopTracers()
+    stopAnimation()
+    stopPulseDesync()
+end
 
-SET_L:AddLabel("── Preset 1: Max Rage ──")
-SET_L:AddLabel("Seizure + Triple Flicker + Bait + Full Evasion")
-SET_L:AddButton({Text="Apply Max Rage", Func=function()
-    applyPreset_MaxRage()
-end})
-
-SET_L:AddLabel(" ")
-SET_L:AddLabel("── Preset 2: Ghost Drift ──")
-SET_L:AddLabel("Drift + Ghost Mode + Clean CFrame + Silent")
-SET_L:AddButton({Text="Apply Ghost Drift", Func=function()
-    applyPreset_GhostDrift()
-end})
-
-SET_R:AddButton({Text="Stop All Features", Func=function()
-    CFG.Void.On = false
-    stopVoid()
-    CFG.GhostMode.On = false
-    applyGhostMode(false)
-    CFG.ChaosMode.On = false
-    CFG.AntiSpec.On  = false
-    CFG.PosLogger.On = false
-    CFG.Crosshair.On = false
-    crosshairImg.ImageTransparency = 1
-    UIS.MouseIconEnabled = true
-    if fovCircle   then fovCircle.Visible   = false end
-    Library:Notify("All features stopped", 3)
-end})
-SET_R:AddButton({Text="Restart Void", Func=function()
-    if CFG.Void.On then
-        stopVoid()
-        task.wait(0.1)
-        startVoid()
-        Library:Notify("Void restarted", 2)
-    else
-        Library:Notify("Enable Void first", 2)
+local function restorePosition()
+    if hrp and clientCFrame then
+        hrp.CFrame = clientCFrame
+        hrp.AssemblyLinearVelocity  = Vector3.new(0,0,0)
+        hrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
     end
-end})
-SET_R:AddButton({Text="Unload UI", Func=function() Library:Unload() end})
-SET_R:AddButton({Text="Print Full Status", Func=function()
-    print("=== LOGIC ENHANCEMENT v4.0 STATUS ===")
-    print("Void Active:     ", VoidState.Active)
-    print("Void Method:     ", CFG.Void.Method)
-    print("Bypass Mode:     ", CFG.Bypass.Mode)
-    print("Adaptive Sub:    ", VoidState.AdaptiveMode)
-    print("Void X/Z:        ", math.floor(VoidState.X), math.floor(VoidState.Z))
-    print("Y Base:          ", math.floor(CFG.Void.YBase))
-    print("Ground Y:        ", VoidState.GroundY)
-    print("Desync:          ", CFG.Desync.On)
-    print("Bait Mode:       ", CFG.Desync.BaitMode)
-    print("Evasion:         ", CFG.Evade.On)
-    print("Ghost Mode:      ", CFG.GhostMode.On)
-    print("Chaos Mode:      ", CFG.ChaosMode.On)
-    print("Anti-Spec:       ", CFG.AntiSpec.On)
-    print("AC Bypass:       ACTIVE (AnalyticsPipelineController GC hook)")
-    print("Cycles:          ", CFG.Stats.CycleCount)
-    print("Kills:           ", CFG.Stats.KillCount)
-    print("Proj Evaded:     ", CFG.Stats.ProjectilesEvaded)
-    print("BP Switches:     ", CFG.Stats.BypassSwitches)
-    print("Server Corrects: ", VoidState.CorrectionCount)
-    Library:Notify("Status printed to console", 2)
-end})
+    if pureHrp and pureClientC then
+        pureHrp.CFrame = pureClientC
+        pureHrp.AssemblyLinearVelocity  = Vector3.new(0,0,0)
+        pureHrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
+    end
+    if pulseHrp and pulseRealCF then
+        pcall(function()
+            pulseHrp.CFrame = pulseRealCF
+            pulseHrp.AssemblyLinearVelocity  = Vector3.new(0,0,0)
+            pulseHrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
+        end)
+    end
+end
 
-SET_I:AddLabel("Logic Enhancement v4.0")
-SET_I:AddLabel("LinoriaLib UI")
-SET_I:AddLabel("33 void methods")
-SET_I:AddLabel("Bypass Engine v4 — Adaptive")
-SET_I:AddLabel("AC: AnalyticsPipelineController GC hook")
-SET_I:AddLabel("Desync: bait + triple flicker")
-SET_I:AddLabel("Evasion: projectile detection")
-SET_I:AddLabel("ESP: box + name + HP + distance")
-SET_I:AddLabel("Ghost Mode: local transparency")
-SET_I:AddLabel("Chaos Mode: auto-rotate 33 methods")
-SET_I:AddLabel("Anti-Spec: position scramble on spec")
-SET_I:AddLabel("Position Logger: XYZ console output")
-SET_I:AddLabel("2 presets: Max Rage + Ghost Drift")
-SET_I:AddLabel("Device: " .. (IsMobile and "MOBILE" or "PC"))
+LocalPlayer.CharacterAdded:Connect(function(character)
+    if Config.Safety.AutoDisableOnDeath then
+        -- Don't disable ragebot here — persistence handles it
+        Config.VoidSpam.Enabled      = false
+        Config.PureDesync.Enabled    = false
+        Config.PulseDesync.Enabled   = false
+        Config.WeaponTracker.Enabled = false
+        Config.ProjectileTP.Enabled  = false
+        Config.AutoCollect.Enabled   = false
+        if Config.RakNet.Enabled then stopRakNetHook(); Config.RakNet.Enabled = false end
+        stopWeaponTrackerHook()
+        stopLoopExplosions()
+        stopTracers()
+        stopPulseDesync()
 
+        hrp = nil; pureHrp = nil; pulseHrp = nil
+        wtShootingPlayers = {}; wtEnemyShooting = false; wtVoidActive = false
+
+        character:WaitForChild("HumanoidRootPart", 5)
+        task.wait(0.5)
+
+        if Config.TracerEffect.Enabled and Config.TracerEffect.OnShoot then
+            startTracerShootHook()
+        end
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Config.Safety.EmergencyKey then
+        disableAll()
+        restorePosition()
+        Library:Notify("Emergency Stop — all features disabled", 3)
+    end
+end)
+
+-- ═══════════════════════════════════════════
+-- VOID SPAM TAB
+-- ═══════════════════════════════════════════
+local VS_L  = Tabs.VoidSpam:AddLeftGroupbox("Void System")
+local VS_PD = Tabs.VoidSpam:AddLeftGroupbox("Pure Desync")
+local VS_PU = Tabs.VoidSpam:AddLeftGroupbox("Pulse Desync")
+local VS_WT = Tabs.VoidSpam:AddRightGroupbox("Weapon Tracker")
+local VS_R  = Tabs.VoidSpam:AddRightGroupbox("Info")
+
+VS_L:AddToggle("VoidEnabled",{Text="Enable Void Spam",Default=false,Callback=function(v)Config.VoidSpam.Enabled=v end})
+VS_L:AddDropdown("VoidMethod",{Text="Method",Default="Extreme Desync",Values={"Extreme Desync","Projectile TP","Orbital Void","Controlled Void","Seizure Mode"},Callback=function(v)Config.VoidSpam.Method=v end})
+VS_L:AddSlider("VoidAltitude",{Text="Altitude",Default=100000,Min=1000,Max=500000,Rounding=0,Callback=function(v)Config.VoidSpam.Altitude=v end})
+VS_L:AddSlider("VoidIntensity",{Text="Intensity %",Default=100,Min=10,Max=100,Rounding=0,Callback=function(v)Config.VoidSpam.Intensity=v end})
+
+VS_PD:AddLabel("Max-range desync, no intensity scaling")
+VS_PD:AddToggle("PureDesyncEnabled",{Text="Enable Pure Desync",Default=false,Callback=function(v)Config.PureDesync.Enabled=v;if v then Library:Notify("Pure Desync enabled",2)end end})
+
+VS_PU:AddLabel("Alternates: void → real → void → real")
+VS_PU:AddLabel("Hide phase: server thinks you're gone")
+VS_PU:AddLabel("Attack phase: fire projectiles freely")
+VS_PU:AddLabel("Works best WITH Projectile TP tab")
+VS_PU:AddToggle("PulseDesyncEnabled",{
+    Text="Enable Pulse Desync",Default=false,
+    Callback=function(v)
+        Config.PulseDesync.Enabled=v
+        if v then startPulseDesync();Library:Notify("Pulse Desync enabled — hide/attack cycling",3)
+        else stopPulseDesync() end
+    end,
+})
+VS_PU:AddSlider("PulseHideTime",{
+    Text="Hide Time (ms)",Default=250,Min=50,Max=2000,Rounding=0,
+    Tooltip="How long to stay at void altitude per cycle",
+    Callback=function(v)Config.PulseDesync.HideTime=v/1000 end,
+})
+VS_PU:AddSlider("PulseAttackTime",{
+    Text="Attack Time (ms)",Default=100,Min=10,Max=1000,Rounding=0,
+    Tooltip="How long to stay at real position per cycle (shoot here)",
+    Callback=function(v)Config.PulseDesync.AttackTime=v/1000 end,
+})
+VS_PU:AddSlider("PulseAltitude",{
+    Text="Void Altitude",Default=150000,Min=10000,Max=500000,Rounding=0,
+    Callback=function(v)Config.PulseDesync.VoidAltitude=v end,
+})
+
+VS_WT:AddLabel("Enemy fires → boost void to 200k")
+VS_WT:AddLabel("Enemy stops → TP into them")
+VS_WT:AddToggle("WeaponTrackerEnabled",{Text="Enable Weapon Tracker",Default=false,Callback=function(v)Config.WeaponTracker.Enabled=v;if v then startWeaponTrackerHook() else stopWeaponTrackerHook() end end})
+VS_WT:AddSlider("WTVoidAltitude",{Text="Boost Altitude",Default=200000,Min=100000,Max=500000,Rounding=0,Callback=function(v)Config.WeaponTracker.VoidAltitude=v end})
+VS_WT:AddSlider("WTTeleportDelay",{Text="Teleport Delay (ms)",Default=100,Min=0,Max=1000,Rounding=0,Callback=function(v)Config.WeaponTracker.TeleportDelay=v/1000 end})
+VS_WT:AddToggle("WTTeamCheck",{Text="Team Check",Default=true,Callback=function(v)Config.WeaponTracker.TeamCheck=v end})
+
+VS_R:AddLabel("SERVER: Random extreme positions")
+VS_R:AddLabel("CLIENT: Normal position, can still move")
+VS_R:AddLabel("")
+VS_R:AddLabel("Pulse Desync:")
+VS_R:AddLabel("Hide → void → server loses you")
+VS_R:AddLabel("Attack → real → shoot safely")
+VS_R:AddLabel("")
+VS_R:AddLabel("Best combo:")
+VS_R:AddLabel("Pulse Desync + Projectile TP")
+VS_R:AddLabel("Fires only during attack window")
+
+-- ═══════════════════════════════════════════
+-- PROJECTILE TP TAB (IMPROVED)
+-- Added: Priority, TeamCheck, VisCheck,
+--        MaxDistance, HitboxSize, ShootAttempts
+-- ═══════════════════════════════════════════
+local PT_L = Tabs.ProjectileTP:AddLeftGroupbox("Projectile Teleport")
+local PT_M = Tabs.ProjectileTP:AddLeftGroupbox("Targeting")
+local PT_R = Tabs.ProjectileTP:AddRightGroupbox("Filters")
+local PT_I = Tabs.ProjectileTP:AddRightGroupbox("How It Works")
+
+PT_L:AddToggle("ProjectileEnabled",{Text="Enable Projectile TP",Default=false,Callback=function(v)Config.ProjectileTP.Enabled=v end})
+PT_L:AddToggle("ProjectileAutoShoot",{Text="Auto Shoot",Default=false,Callback=function(v)Config.ProjectileTP.AutoShoot=v end})
+PT_L:AddDropdown("ProjectileHitbox",{
+    Text="Target Hitbox",Default="HitBoxHeadSmall",
+    Values={"HitBoxHeadSmall","HitBoxHead","Head","HumanoidRootPart"},
+    Callback=function(v)Config.ProjectileTP.TargetPart=v end,
+})
+PT_L:AddSlider("ProjectileDelay",{
+    Text="Loop Delay (ms)",Default=10,Min=1,Max=100,Rounding=0,
+    Callback=function(v)Config.ProjectileTP.LoopDelay=v/1000 end,
+})
+PT_L:AddToggle("ProjectileCache",{Text="Cache Projectiles",Default=true,Callback=function(v)Config.ProjectileTP.Cache=v end})
+
+-- Shoot Attempts (from image)
+PT_L:AddSlider("ShootAttempts",{
+    Text="Shoot Attempts",Default=1,Min=1,Max=10,Rounding=0,
+    Tooltip="How many times to firetouchinterest per projectile per target",
+    Callback=function(v)Config.ProjectileTP.ShootAttempts=v end,
+})
+PT_L:AddSlider("HitboxSize",{
+    Text="Hitbox Size (studs)",Default=5,Min=1,Max=50,Rounding=0,
+    Tooltip="Larger = easier to hit, creates expanded hitbox part",
+    Callback=function(v)Config.ProjectileTP.HitboxSize=v end,
+})
+
+-- Targeting (from image: priority dropdown)
+PT_M:AddLabel("Priority controls which enemy is targeted first")
+PT_M:AddDropdown("ProjectilePriority",{
+    Text="Target Priority",Default="Closest",
+    Values={"Closest","Furthest","Random","Lowest HP","Highest HP"},
+    Tooltip="How to sort the enemy target list",
+    Callback=function(v)Config.ProjectileTP.Priority=v end,
+})
+
+-- Filters (from image: team check, vis check, max distance)
+PT_R:AddToggle("ProjTeamCheck",{
+    Text="Team Check",Default=true,
+    Tooltip="Skip teammates",
+    Callback=function(v)Config.ProjectileTP.TeamCheck=v end,
+})
+PT_R:AddToggle("ProjVisCheck",{
+    Text="Visible Check",Default=false,
+    Tooltip="Only hit enemies you have line of sight to",
+    Callback=function(v)Config.ProjectileTP.VisCheck=v end,
+})
+PT_R:AddSlider("ProjMaxDist",{
+    Text="Max Distance",Default=999,Min=10,Max=999,Rounding=0,
+    Callback=function(v)Config.ProjectileTP.MaxDistance=v end,
+})
+
+PT_R:AddLabel("")
+PT_R:AddLabel("Pulse Desync sync:")
+PT_R:AddLabel("Projectile TP only fires during")
+PT_R:AddLabel("Pulse Desync attack window")
+PT_R:AddLabel("Enable both for best results")
+
+PT_I:AddLabel("1. You shoot → CoreProjectile")
+PT_I:AddLabel("2. firetouchinterest → enemy hitbox")
+PT_I:AddLabel("3. Shoot Attempts × per target")
+PT_I:AddLabel("")
+PT_I:AddLabel("Pulse Desync + Projectile TP:")
+PT_I:AddLabel("Server sees you at void altitude")
+PT_I:AddLabel("→ can't shoot you back")
+PT_I:AddLabel("Attack window = you shoot them")
+PT_I:AddLabel("→ instant hit, no retaliation")
+
+-- ═══════════════════════════════════════════
+-- RAGEBOT TAB (IMPROVED)
+-- ═══════════════════════════════════════════
+local RB_L = Tabs.Ragebot:AddLeftGroupbox("Ragebot")
+local RB_T = Tabs.Ragebot:AddLeftGroupbox("Timing (Hide / Attack)")
+local RB_R = Tabs.Ragebot:AddRightGroupbox("Priority & Persistence")
+
+RB_L:AddToggle("RagebotEnabled",{
+    Text="Enabled",Default=false,
+    Callback=function(v)
+        if v then enableRagebot() else disableRagebot() end
+    end,
+})
+RB_L:AddToggle("RagebotVoidSpam",{
+    Text="Void Spam Sync",Default=true,
+    Tooltip="Sync hide/attack timing with Pulse Desync",
+    Callback=function(v)Config.Ragebot.VoidSpamSync=v end,
+})
+RB_L:AddToggle("RagebotClientTP",{
+    Text="Client-Side Enemy TP",Default=true,
+    Tooltip="Pulls enemy to your position visually",
+    Callback=function(v)Config.Ragebot.ClientTP=v end,
+})
+RB_L:AddSlider("RagebotOrbitRadius",{Text="Orbit Radius",Default=5,Min=1,Max=50,Rounding=0,Callback=function(v)Config.Ragebot.OrbitRadius=v end})
+RB_L:AddSlider("RagebotOrbitSpeed",{Text="Orbit Speed",Default=10,Min=1,Max=50,Rounding=0,Callback=function(v)Config.Ragebot.OrbitSpeed=v end})
+
+-- Hide / Attack timing (from image)
+RB_T:AddLabel("Matches the image: hide:0.25s attack:0.1s")
+RB_T:AddLabel("During hide: orbit at void altitude")
+RB_T:AddLabel("During attack: Projectile TP fires")
+RB_T:AddSlider("RagebotHideTime",{
+    Text="Hide Time (ms)",Default=250,Min=50,Max=2000,Rounding=0,
+    Callback=function(v)
+        Config.Ragebot.HideTime=v/1000
+        -- Keep in sync with Pulse Desync if using sync
+        if Config.Ragebot.VoidSpamSync then Config.PulseDesync.HideTime=v/1000 end
+    end,
+})
+RB_T:AddSlider("RagebotAttackTime",{
+    Text="Attack Time (ms)",Default=100,Min=10,Max=1000,Rounding=0,
+    Callback=function(v)
+        Config.Ragebot.AttackTime=v/1000
+        if Config.Ragebot.VoidSpamSync then Config.PulseDesync.AttackTime=v/1000 end
+    end,
+})
+RB_T:AddSlider("RagebotShootAttempts",{
+    Text="Shoot Attempts",Default=1,Min=1,Max=10,Rounding=0,
+    Tooltip="Passed through to Projectile TP during attack phase",
+    Callback=function(v)
+        Config.Ragebot.ShootAttempts=v
+        -- Sync with Projectile TP shoot attempts
+        Config.ProjectileTP.ShootAttempts=v
+    end,
+})
+
+-- Persistence settings
+RB_R:AddLabel("Persist fixes: ragebot auto-resumes")
+RB_R:AddLabel("after round ends / character resets")
+RB_R:AddLabel("No need to re-enable every round")
+RB_R:AddToggle("RagebotPersist",{
+    Text="Persist Across Rounds",Default=true,
+    Tooltip="Auto re-enable ragebot after each round",
+    Callback=function(v)Config.Ragebot.PersistAcrossRounds=v end,
+})
+RB_R:AddLabel("")
+RB_R:AddLabel("Target Priority (shared with Projectile TP)")
+RB_R:AddDropdown("RagebotPriority",{
+    Text="Priority",Default="Closest",
+    Values={"Closest","Furthest","Random","Lowest HP","Highest HP"},
+    Callback=function(v)
+        Config.ProjectileTP.Priority=v
+    end,
+})
+RB_R:AddButton({
+    Text="Force Resume Ragebot",
+    Func=function()
+        if not Config.Ragebot.Enabled then
+            enableRagebot()
+            Library:Notify("Ragebot force-resumed",2)
+        else
+            Library:Notify("Ragebot already running",2)
+        end
+    end,
+})
+RB_R:AddButton({
+    Text="Force Stop Ragebot",
+    Func=function()
+        disableRagebot()
+        Library:Notify("Ragebot stopped",2)
+    end,
+})
+
+-- ═══════════════════════════════════════════
+-- WEAPONS TAB
+-- ═══════════════════════════════════════════
+local WP_L = Tabs.Weapons:AddLeftGroupbox("Reload Speed")
+local WP_R = Tabs.Weapons:AddRightGroupbox("Reload Info")
+
+WP_L:AddLabel("Applies to: Bow, Daggers, Slingshot")
+WP_L:AddLabel("Daggers min capped at 0.09s")
+WP_L:AddToggle("ReloadEnabled",{Text="Enable Reload Speed",Default=false,Callback=function(v)Config.Weapons.ReloadSpeedEnabled=v;applyReloadPatch() end})
+WP_L:AddSlider("ReloadLength",{Text="Reload Length (s)",Default=0,Min=0,Max=5,Rounding=2,Suffix="s",Callback=function(v)Config.Weapons.ReloadLength=v;if Config.Weapons.ReloadSpeedEnabled then applyReloadPatch() end end})
+WP_L:AddButton({Text="Apply Patch Now",Func=function()applyReloadPatch();Library:Notify("Reload patch applied",2)end})
+WP_L:AddButton({Text="Restore Originals",Func=function()Config.Weapons.ReloadSpeedEnabled=false;applyReloadPatch();Library:Notify("Restored",2)end})
+WP_R:AddLabel("Uses rawget/rawset to bypass")
+WP_R:AddLabel("ItemLibrary __index metamethods")
+WP_R:AddLabel("0s = instant reload")
+
+-- ═══════════════════════════════════════════
+-- EFFECTS TAB
+-- ═══════════════════════════════════════════
+local EF_L  = Tabs.Effects:AddLeftGroupbox("Explosion Effects")
+local EF_R  = Tabs.Effects:AddRightGroupbox("Tracer Effects")
+local EF_A  = Tabs.Effects:AddLeftGroupbox("Animation Spoof")
+local EF_MC = Tabs.Effects:AddRightGroupbox("Mobile Controller")
+
+EF_L:AddLabel("Status: " .. (ExplosionEffectFn and "Loaded ✓" or "Not Found ✗"))
+EF_L:AddToggle("ExplosionEnabled",{Text="Enable Explosion Effects",Default=false,Callback=function(v)Config.ExplosionEffect.Enabled=v;if not v then stopLoopExplosions() end end})
+EF_L:AddToggle("ExplosionOnDeath",{Text="Explode on Enemy Death",Default=true,Callback=function(v)Config.ExplosionEffect.OnDeath=v end})
+EF_L:AddToggle("ExplosionOnKill",{Text="Explode on Kill",Default=true,Callback=function(v)Config.ExplosionEffect.OnKill=v end})
+EF_L:AddToggle("ExplosionOnHit",{Text="Explode on Hit",Default=false,Callback=function(v)Config.ExplosionEffect.OnHit=v end})
+EF_L:AddSlider("ExplosionSize",{Text="Explosion Size",Default=24,Min=4,Max=100,Rounding=0,Callback=function(v)Config.ExplosionEffect.Size=v end})
+EF_L:AddSlider("ExplosionVariance",{Text="Sound Variance %",Default=20,Min=0,Max=100,Rounding=0,Callback=function(v)Config.ExplosionEffect.SpeedVariance=v/100 end})
+EF_L:AddToggle("ExplosionLoop",{Text="Loop Explosions Around Self",Default=false,Callback=function(v)Config.ExplosionEffect.LoopExplosions=v;if v and Config.ExplosionEffect.Enabled then startLoopExplosions() else stopLoopExplosions() end end})
+EF_L:AddSlider("ExplosionLoopInterval",{Text="Loop Interval",Default=50,Min=10,Max=200,Rounding=0,Suffix="/100s",Callback=function(v)Config.ExplosionEffect.LoopInterval=v/100 end})
+EF_L:AddButton({Text="Explode at My Position",Func=function()if not ExplosionEffectFn then Library:Notify("Module not loaded",3);return end;explodeAtSelf();Library:Notify("Explosion triggered",2)end})
+EF_L:AddButton({Text="Explode at Closest Enemy",Func=function()if not ExplosionEffectFn then Library:Notify("Module not loaded",3);return end;explodeAtEnemy();Library:Notify("Explosion triggered",2)end})
+
+EF_R:AddLabel("Status: " .. (TracerEffectModule and "Loaded ✓" or "Not Found ✗"))
+EF_R:AddToggle("TracerEnabled",{Text="Enable Tracer Effects",Default=false,Callback=function(v)Config.TracerEffect.Enabled=v;if v then startTracerShootHook() else stopTracers() end end})
+EF_R:AddToggle("TracerOnShoot",{Text="Tracer on Shoot",Default=true,Callback=function(v)Config.TracerEffect.OnShoot=v end})
+EF_R:AddToggle("TracerToEnemy",{Text="Trace to Closest Enemy",Default=false,Callback=function(v)Config.TracerEffect.TraceToEnemy=v end})
+EF_R:AddLabel("Color"):AddColorPicker("TracerColor",{Default=Color3.fromRGB(255,50,50),Callback=function(v)Config.TracerEffect.Color=v end})
+EF_R:AddSlider("TracerWidth",{Text="Tracer Width",Default=5,Min=1,Max=50,Rounding=0,Suffix="/100",Callback=function(v)Config.TracerEffect.Width=v/100 end})
+EF_R:AddSlider("TracerDuration",{Text="Tracer Duration (ms)",Default=300,Min=50,Max=2000,Rounding=0,Callback=function(v)Config.TracerEffect.Duration=v/1000 end})
+EF_R:AddButton({Text="Draw Tracer to Closest Enemy",Func=function()if not TracerEffectModule then Library:Notify("Module not loaded",3);return end;drawManualTracer()end})
+
+EF_A:AddLabel("PlayPreloadedAnimation: " .. (PlayAnimFn and "✓" or "Fallback"))
+EF_A:AddInput("AnimID",{Default="",Numeric=true,Finished=false,Text="Animation ID",Placeholder="e.g. 507770239",Callback=function(v)Config.AnimationSpoof.AnimId=v end})
+EF_A:AddToggle("AnimLooped",{Text="Looped",Default=false,Callback=function(v)Config.AnimationSpoof.Looped=v end})
+EF_A:AddSlider("AnimSpeed",{Text="Playback Speed",Default=10,Min=1,Max=50,Rounding=0,Suffix="/10",Callback=function(v)Config.AnimationSpoof.Speed=v/10 end})
+EF_A:AddButton({Text="Play Animation",Func=function()local id=Config.AnimationSpoof.AnimId;if not id or id=="" then Library:Notify("Enter an animation ID first",2);return end;playAnimation(id,Config.AnimationSpoof.Looped,Config.AnimationSpoof.Speed);Library:Notify("Playing animation "..id,2)end})
+EF_A:AddButton({Text="Stop Animation",Func=function()stopAnimation();Library:Notify("Animation stopped",2)end})
+
+EF_MC:AddLabel("MobileController: " .. (MobileController and "✓" or "✗"))
+EF_MC:AddToggle("ForceEnableMobile",{Text="Force Enable Mobile Mode",Default=false,Callback=function(v)Config.MobileCtrl.ForceEnableMobile=v;applyMobileControllerSettings() end})
+EF_MC:AddToggle("DisableMobilePrompts",{Text="Hide Mobile Duel Prompts",Default=false,Callback=function(v)Config.MobileCtrl.DisableMobilePrompts=v;applyMobileControllerSettings() end})
+EF_MC:AddButton({Text="Apply Mobile Settings Now",Func=function()applyMobileControllerSettings();Library:Notify("Mobile settings applied",2)end})
+
+-- ═══════════════════════════════════════════
+-- MISC TAB
+-- ═══════════════════════════════════════════
+local MS_L  = Tabs.Misc:AddLeftGroupbox("RakNet Ping Spoof")
+local MS_R  = Tabs.Misc:AddRightGroupbox("Auto Collect")
+local MS_OB = Tabs.Misc:AddLeftGroupbox("Anti Out Of Bounds")
+
+MS_L:AddLabel("Spoofs packet 0x1B ping to 0xFFFFFFFF")
+MS_L:AddToggle("RakNetEnabled",{Text="Enable RakNet Ping Spoof",Default=false,Callback=function(v)Config.RakNet.Enabled=v;if v then startRakNetHook() else stopRakNetHook() end end})
+MS_L:AddButton({Text="Remove Hook Now",Func=function()stopRakNetHook();Config.RakNet.Enabled=false;Library:Notify("Hook removed",2)end})
+
+MS_R:AddToggle("AutoCollectEnabled",{Text="Enable Auto Collect",Default=false,Callback=function(v)Config.AutoCollect.Enabled=v end})
+MS_R:AddToggle("CollectHealth",{Text="Collect Health Drops",Default=true,Tooltip="Only when HP not full",Callback=function(v)Config.AutoCollect.CollectHealth=v end})
+MS_R:AddToggle("CollectAmmo",{Text="Collect Ammo Drops",Default=true,Callback=function(v)Config.AutoCollect.CollectAmmo=v end})
+
+MS_OB:AddLabel("3 layers: Remote spoof, Module patch, Hide")
+MS_OB:AddToggle("AntiOOBEnabled",{Text="Enable Anti OOB",Default=false,Callback=function(v)Config.AntiOOB.Enabled=v;if v then startAntiOOB() else stopAntiOOB() end end})
+MS_OB:AddToggle("AntiOOBSpoofRemote",{Text="Spoof OOB Remote",Default=true,Callback=function(v)Config.AntiOOB.SpoofRemote=v end})
+MS_OB:AddToggle("AntiOOBPatchModule",{Text="Patch OOB Module",Default=true,Callback=function(v)Config.AntiOOB.PatchModule=v;if v and Config.AntiOOB.Enabled then antiOOB_PatchModule() end end})
+MS_OB:AddToggle("AntiOOBHideParts",{Text="Hide OOB Zone Parts",Default=false,Callback=function(v)Config.AntiOOB.HideOOBParts=v;if v and Config.AntiOOB.Enabled then antiOOB_HideOOBParts(true) end end})
+MS_OB:AddButton({Text="Force Apply Anti OOB Now",Func=function()startAntiOOB();Library:Notify("Anti OOB force-applied",2)end})
+
+-- ═══════════════════════════════════════════
+-- SETTINGS TAB
+-- ═══════════════════════════════════════════
+local ST_L = Tabs.Settings:AddLeftGroupbox("Safety")
+local ST_R = Tabs.Settings:AddRightGroupbox("Stop All")
+
+ST_L:AddToggle("AutoDisable",{Text="Auto Disable on Death",Default=true,Callback=function(v)Config.Safety.AutoDisableOnDeath=v end})
+ST_L:AddLabel("Emergency Stop Key:  DELETE")
+ST_L:AddLabel("Restores position + disables everything")
+ST_L:AddLabel("(Ragebot persist still re-enables after death)")
+
+ST_R:AddButton({
+    Text="Disable All Features",
+    Func=function()disableAll();restorePosition();Library:Notify("All features disabled",2)end,
+})
+ST_R:AddButton({
+    Text="Unload Script",
+    Func=function()
+        for _,conn in pairs(Connections) do if typeof(conn)=="RBXScriptConnection" then conn:Disconnect() end end
+        for _,conn in ipairs(antiOOBConnections) do pcall(function()conn:Disconnect()end) end
+        for _,conn in ipairs(tracerConnections) do pcall(function()conn:Disconnect()end) end
+        for _,conn in ipairs(explosionDeathConnections) do pcall(function()conn:Disconnect()end) end
+        if ragebotPersistConn then ragebotPersistConn:Disconnect() end
+        pcall(function()RunService:UnbindFromRenderStep("VoidRestore")end)
+        pcall(function()RunService:UnbindFromRenderStep("PureDesyncRestore")end)
+        stopRakNetHook(); stopWeaponTrackerHook(); stopAntiOOB()
+        stopLoopExplosions(); stopTracers(); stopAnimation()
+        stopPulseDesync(); stopRagebotLoop()
+        Config.Weapons.ReloadSpeedEnabled=false; applyReloadPatch()
+        restorePosition()
+        Library:Unload()
+    end,
+    DoubleClick=true,
+    Tooltip="Double-click to unload",
+})
+
+-- ═══════════════════════════════════════════
+-- THEME & SAVE MANAGER
+-- ═══════════════════════════════════════════
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({})
-ThemeManager:SetFolder("LogicEnhancement_v4")
-SaveManager:SetFolder("LogicEnhancement_v4")
+ThemeManager:SetFolder("RivalsTool")
+SaveManager:SetFolder("RivalsTool")
 SaveManager:BuildConfigSection(Tabs.Settings)
 ThemeManager:ApplyToTab(Tabs.Settings)
 SaveManager:LoadAutoloadConfig()
 
 -- ═══════════════════════════════════════════
--- CHARACTER RESPAWN
+-- LOAD COMPLETE
 -- ═══════════════════════════════════════════
-LP.CharacterAdded:Connect(function(nc)
-    character        = nc
-    humanoidRootPart = nc:WaitForChild("HumanoidRootPart")
-    humanoid         = nc:WaitForChild("Humanoid")
-
-    VoidState.InFlicker       = false
-    VoidState.EvadeCooldown   = 0
-    VoidState.DesyncTimer     = 0
-    VoidState.CorrectionCount = 0
-
-    task.wait(1.5)
-    for _, p in ipairs(Players:GetPlayers()) do watchPlayer(p) end
-
-    if CFG.Void.On then startVoid() end
-    if CFG.GhostMode.On then
-        task.wait(0.5)
-        applyGhostMode(true)
-    end
-end)
-
--- ═══════════════════════════════════════════
--- CROSSHAIR RENDER
--- ═══════════════════════════════════════════
-RunService.RenderStepped:Connect(function()
-    if CFG.Crosshair.On then
-        crosshairImg.Position = UDim2.new(0.5, 0, 0.5, 0)
-    end
-end)
-
--- ═══════════════════════════════════════════
--- LOAD NOTIFICATIONS
--- ═══════════════════════════════════════════
-Library:Notify("Logic Enhancement v4.0 loaded — " .. (IsMobile and "MOBILE" or "PC"), 6)
-Library:Notify("2 presets ready in Settings: Max Rage + Ghost Drift", 5)
-
-print("[LOGIC ENHANCEMENT v4.0] Loaded")
-print("AC Bypass: ACTIVE (AnalyticsPipelineController GC hook) | Methods: 33 | Bypass Engine: v4 Adaptive")
-print("Device: " .. (IsMobile and "MOBILE" or "PC"))
-print("New in v4: ESP | Ghost Mode | Chaos Mode | Anti-Spectator | Position Logger | 2 Presets")
+Library:Notify("Rivals Tool loaded — " .. (IsMobile and "MOBILE" or "PC") .. " | DELETE = Emergency Stop", 6)
+print("[RIVALS TOOL] " .. (IsMobile and "MOBILE" or "PC"))
+print("[VOID]    Void Spam + Pure Desync + Pulse Desync + Weapon Tracker ready")
+print("[PROJ]    Projectile TP — Priority, TeamCheck, VisCheck, ShootAttempts, HitboxSize")
+print("[RAGEBOT] Hide/Attack timing + Persistence across rounds")
+print("[WEAPONS] Reload speed patcher ready")
+print("[EFFECTS] Explosion: " .. (ExplosionEffectFn and "✓" or "✗") .. "  Tracer: " .. (TracerEffectModule and "✓" or "✗") .. "  Anim: " .. (PlayAnimFn and "✓" or "✗"))
