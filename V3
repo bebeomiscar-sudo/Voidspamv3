@@ -1,7 +1,7 @@
 --[[
     ╔══════════════════════════════════════════════════════════╗
-    ║  RIVALS - Ultimate VoidSpam + Projectile TP             ║
-    ║  Improved: Ragebot persistence, Desync, New features    ║
+    ║  RIVALS - Ultimate Tool                                  ║
+    ║  New: Aimbot, TrackDummy, Gun/Melee Hooks, Sound Spam   ║
     ╚══════════════════════════════════════════════════════════╝
 ]]
 
@@ -17,7 +17,6 @@ local Workspace         = cloneref(game:GetService("Workspace"))
 local ReplicatedStorage = cloneref(game:GetService("ReplicatedStorage"))
 local UserInputService  = cloneref(game:GetService("UserInputService"))
 local CollectionService = cloneref(game:GetService("CollectionService"))
-local StarterPlayer     = cloneref(game:GetService("StarterPlayer"))
 local TweenService      = cloneref(game:GetService("TweenService"))
 
 local LocalPlayer = Players.LocalPlayer
@@ -65,6 +64,7 @@ local Window = Library:CreateWindow({
 })
 
 local Tabs = {
+    Aimbot       = Window:AddTab("Aimbot"),
     VoidSpam     = Window:AddTab("Void Spam"),
     ProjectileTP = Window:AddTab("Projectile TP"),
     Ragebot      = Window:AddTab("Ragebot"),
@@ -78,22 +78,40 @@ local Tabs = {
 -- CONFIGURATION
 -- ═══════════════════════════════════════════
 local Config = {
-    VoidSpam = {
+    -- ─── AIMBOT ───────────────────────────
+    Aimbot = {
+        Enabled       = false,
+        Smoothness    = 10,
+        ReactionTime  = 100,
+        ForgotTime    = 3,
+        XSmooth       = 0,
+        YSmooth       = 0,
+        JumpSmooth    = 0,
+        TeamCheck     = false,
+        VisibleCheck  = false,
+        TargetPart    = "Head",
+        MaxFOV        = 150,
+        DrawFOV       = false,
+        FOVStyle      = "Half",
+        DynamicFOV    = false,
+    },
+    -- ─── TRACK DUMMY ──────────────────────
+    TrackDummy = {
         Enabled    = false,
-        Method     = "Extreme Desync",
-        Altitude   = 100000,
-        Intensity  = 100,
+        DummyIndex = 99,   -- which dummy index (99 or 40)
     },
-    PureDesync = {
-        Enabled = false,
+    -- ─── VOID SPAM ────────────────────────
+    VoidSpam = {
+        Enabled   = false,
+        Method    = "Extreme Desync",
+        Altitude  = 100000,
+        Intensity = 100,
     },
-    -- NEW: Pulse Desync — alternates between void and real position
-    -- on a tight interval to maximize server confusion while keeping
-    -- projectile hit registration reliable
+    PureDesync = { Enabled = false },
     PulseDesync = {
         Enabled      = false,
-        HideTime     = 0.25,   -- seconds at void position (server thinks you're gone)
-        AttackTime   = 0.1,    -- seconds at real position (shoot window)
+        HideTime     = 0.25,
+        AttackTime   = 0.1,
         VoidAltitude = 150000,
     },
     WeaponTracker = {
@@ -102,51 +120,48 @@ local Config = {
         TeleportDelay = 0.1,
         TeamCheck     = true,
     },
+    -- ─── PROJECTILE TP ────────────────────
     ProjectileTP = {
         Enabled       = false,
         AutoShoot     = false,
         TargetPart    = "HitBoxHeadSmall",
         LoopDelay     = 0.01,
         Cache         = true,
-        -- NEW from image:
-        ShootAttempts = 1,     -- how many times to firetouchinterest per projectile
-        Priority      = "Closest", -- targeting priority
+        ShootAttempts = 1,
+        Priority      = "Closest",
         TeamCheck     = true,
         VisCheck      = false,
         MaxDistance   = 999,
-        HitboxSize    = 5,     -- virtual hitbox expansion radius
+        HitboxSize    = 5,
     },
-    -- NEW: Ragebot with hide/attack timing (from image)
+    -- ─── RAGEBOT ──────────────────────────
     Ragebot = {
-        Enabled        = false,
-        VoidSpamSync   = true,    -- sync with void spam hide/attack timing
-        HideTime       = 0.25,    -- match PulseDesync
-        AttackTime     = 0.1,
-        ShootAttempts  = 1,
-        OrbitRadius    = 5,
-        OrbitSpeed     = 10,
-        ClientTP       = true,
-        PersistAcrossRounds = true, -- RE-ENABLE after round transitions
+        Enabled             = false,
+        VoidSpamSync        = true,
+        HideTime            = 0.25,
+        AttackTime          = 0.1,
+        ShootAttempts       = 1,
+        OrbitRadius         = 5,
+        OrbitSpeed          = 10,
+        ClientTP            = true,
+        PersistAcrossRounds = true,
     },
+    -- ─── WEAPONS ──────────────────────────
     Weapons = {
         ReloadSpeedEnabled = false,
         ReloadLength       = 0,
         Whitelist          = {"Bow", "Daggers", "Slingshot"},
     },
-    RakNet = {
-        Enabled = false,
+    -- ─── SOUND SPAM ───────────────────────
+    SoundSpam = {
+        Enabled  = false,
+        Interval = 0.1,
+        Volume   = 1,
+        -- Sound IDs extracted from Gun module and Assault Rifle viewmodel
+        SoundId  = "rbxassetid://13455969017", -- ExplosionEffect default
+        CustomId = "",
     },
-    AutoCollect = {
-        Enabled       = false,
-        CollectHealth = true,
-        CollectAmmo   = true,
-    },
-    AntiOOB = {
-        Enabled      = false,
-        SpoofRemote  = true,
-        PatchModule  = true,
-        HideOOBParts = false,
-    },
+    -- ─── EFFECTS ──────────────────────────
     ExplosionEffect = {
         Enabled        = false,
         OnDeath        = true,
@@ -166,14 +181,26 @@ local Config = {
         Duration     = 0.3,
     },
     AnimationSpoof = {
-        Enabled = false,
-        AnimId  = "",
-        Looped  = false,
-        Speed   = 1,
+        AnimId = "",
+        Looped = false,
+        Speed  = 1,
     },
     MobileCtrl = {
         ForceEnableMobile    = false,
         DisableMobilePrompts = false,
+    },
+    -- ─── MISC ─────────────────────────────
+    RakNet     = { Enabled = false },
+    AutoCollect = {
+        Enabled       = false,
+        CollectHealth = true,
+        CollectAmmo   = true,
+    },
+    AntiOOB = {
+        Enabled      = false,
+        SpoofRemote  = true,
+        PatchModule  = true,
+        HideOOBParts = false,
     },
     Safety = {
         AutoDisableOnDeath = true,
@@ -184,65 +211,89 @@ local Config = {
 -- ═══════════════════════════════════════════
 -- VARIABLES
 -- ═══════════════════════════════════════════
-local hrp
-local clientCFrame
-local clientVelocity
-local clientAngularVelocity
-local Connections     = {}
-local ProjectileCache = {}
-local EnemyCache      = {}
+local hrp, clientCFrame, clientVelocity, clientAngularVelocity
+local pureHrp, pureClientC, pureClientV, pureClientVA
+local pulseHrp, pulseRealCF, pulseRealV, pulseRealVA
+local pulsePhase    = "attack"
+local pulseTask     = nil
 
-local pureHrp
-local pureClientC
-local pureClientV
-local pureClientVA
+local Connections         = {}
+local ProjectileCache     = {}
+local EnemyCache          = {}
 
--- Pulse Desync state
-local pulseHrp         = nil
-local pulseRealCF      = nil
-local pulseRealV       = nil
-local pulseRealVA      = nil
-local pulsePhase       = "attack" -- "hide" or "attack"
-local pulseNextSwitch  = 0
-local pulseTask        = nil
+local wtShootingPlayers   = {}
+local wtEnemyShooting     = false
+local wtLastShooter       = nil
+local wtVoidActive        = false
+local wtTeleportTask      = nil
+local wtHookActive        = false
 
--- Weapon Tracker
-local wtShootingPlayers = {}
-local wtEnemyShooting   = false
-local wtLastShooter     = nil
-local wtVoidActive      = false
-local wtTeleportTask    = nil
-local wtHookActive      = false
+local ragebotWasEnabled   = false
+local ragebotPersistConn  = nil
+local ragebotPhase        = "attack"
+local ragebotLoopTask     = nil
 
--- Ragebot persistence
-local ragebotWasEnabled      = false
-local ragebotPersistConn     = nil
-local ragebotPhase           = "attack" -- "hide" or "attack"
-local ragebotNextSwitch      = 0
-local ragebotShootCount      = 0
-local ragebotCurrentTarget   = nil
-
--- Anti OOB
-local antiOOBHookRef       = nil
-local antiOOBHookActive    = false
+local antiOOBHookRef      = nil
+local antiOOBHookActive   = false
 local antiOOBModulePatched = false
-local antiOOBConnections   = {}
+local antiOOBConnections  = {}
 
--- Effects
+-- Aimbot state
+local camera            = Workspace.CurrentCamera
+local lockedTarget      = nil
+local lockTimer         = 0
+local delayedTargetPos  = nil
+local reactionTimer     = 0
+local isInReaction      = false
+local fovCircle         = Drawing.new("Circle")
+fovCircle.NumSides      = 64
+fovCircle.Visible       = false
+fovCircle.Color         = Color3.fromRGB(255, 255, 255)
+fovCircle.Transparency  = 0.7
+
+-- CameraController for aimbot
+local CameraController = nil
+pcall(function()
+    for _, d in ipairs(LocalPlayer.PlayerScripts:GetDescendants()) do
+        if d:IsA("ModuleScript") and d.Name == "CameraController" then
+            local ok, m = pcall(require, d)
+            if ok and m and m.Rotation and m.SetRotation then
+                CameraController = m; break
+            end
+        end
+    end
+end)
+
+-- Effect modules
 local ExplosionEffectFn  = nil
 local TracerEffectModule = nil
 local PlayAnimFn         = nil
 local MobileController   = nil
-local Utility            = nil
-local BetterDebris       = nil
 
-local loopExplosionTask  = nil
-local activeAnimTrack    = nil
-local tracerConnections  = {}
+local loopExplosionTask       = nil
+local activeAnimTrack         = nil
+local tracerConnections       = {}
 local explosionDeathConnections = {}
+local soundSpamTask           = nil
+
+-- Sound IDs extracted from the provided Gun/Assault Rifle modules
+local SOUND_IDS = {
+    ["Assault Rifle Aim In"]  = "rbxassetid://96253147006478",
+    ["No Ammo Click"]         = "rbxassetid://13087319223",
+    ["Explosion / Impact"]    = "rbxassetid://13455969017",
+    ["Reload Action Start"]   = "rbxassetid://17139961241",
+    ["Reload Action Done"]    = "rbxassetid://17156089790",
+}
+local SOUND_ID_VALUES = {}
+local SOUND_ID_KEYS   = {}
+for k, v in pairs(SOUND_IDS) do
+    table.insert(SOUND_ID_KEYS, k)
+    SOUND_ID_VALUES[k] = v
+end
+table.sort(SOUND_ID_KEYS)
 
 -- ═══════════════════════════════════════════
--- LOAD EFFECT MODULES
+-- LOAD MODULES SAFELY
 -- ═══════════════════════════════════════════
 local function safeRequire(path)
     local ok, result = pcall(require, path)
@@ -250,10 +301,6 @@ local function safeRequire(path)
     return nil
 end
 
-pcall(function()
-    Utility      = safeRequire(ReplicatedStorage.Modules.Utility)
-    BetterDebris = safeRequire(ReplicatedStorage.Modules.BetterDebris)
-end)
 pcall(function()
     local fn = safeRequire(LocalPlayer.PlayerScripts.Modules.Functions:WaitForChild("ExplosionEffect"))
     if fn and typeof(fn) == "function" then ExplosionEffectFn = fn end
@@ -271,7 +318,7 @@ pcall(function()
 end)
 
 -- ═══════════════════════════════════════════
--- UTILITY
+-- UTILITY FUNCTIONS
 -- ═══════════════════════════════════════════
 local function betterRandom(min, max, deadMin, deadMax)
     local val = math.random(min, max)
@@ -305,31 +352,54 @@ local function isVisibleFrom(origin, targetPart)
     return ok and r or false
 end
 
-local function GetClosestEnemy()
-    local closest, closestDist = nil, math.huge
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and IsAlive(player) then
-            if Config.ProjectileTP.TeamCheck and isSameTeam(player) then continue end
-            local root   = player.Character:FindFirstChild("HumanoidRootPart")
-            local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if root and myRoot then
-                local dist = (myRoot.Position - root.Position).Magnitude
-                if dist < closestDist and dist <= Config.ProjectileTP.MaxDistance then
-                    if Config.ProjectileTP.VisCheck then
-                        if not isVisibleFrom(myRoot.Position, root) then continue end
-                    end
-                    closest     = player
-                    closestDist = dist
-                end
-            end
-        end
-    end
-    return closest
+local function getScreenCenter()
+    return Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
 end
 
+local function angleDiff(f, t)
+    local d = t - f
+    return ((d + math.pi) % (math.pi * 2)) - math.pi
+end
+
+-- ─── TARGET PART SYSTEM ───────────────────
+local ALL_TARGET_PARTS = {
+    "Head","HumanoidRootPart","UpperTorso","LowerTorso","Torso",
+    "LeftUpperArm","LeftLowerArm","LeftHand","RightUpperArm","RightLowerArm","RightHand",
+    "LeftUpperLeg","LeftLowerLeg","LeftFoot","RightUpperLeg","RightLowerLeg","RightFoot",
+}
+local TARGET_PART_PRESETS = {
+    ["Head"]       = {"Head"},
+    ["HumanoidRootPart"] = {"HumanoidRootPart"},
+    ["Torso"]      = {"Torso","UpperTorso","LowerTorso","HumanoidRootPart"},
+    ["UpperTorso"] = {"UpperTorso","Torso","LowerTorso","HumanoidRootPart"},
+    ["LowerTorso"] = {"LowerTorso","Torso","UpperTorso","HumanoidRootPart"},
+    ["Body"]       = {"UpperTorso","LowerTorso","Torso","HumanoidRootPart"},
+    ["Head, Body"] = {"Head","UpperTorso","LowerTorso","Torso","HumanoidRootPart"},
+    ["Random"]     = {"Random"},
+}
+local TARGET_OPTIONS = {
+    "Head","HumanoidRootPart","Torso","UpperTorso","LowerTorso",
+    "Body","Head, Body","Random"
+}
+
+local function getBestPart(char, setting)
+    local preset = TARGET_PART_PRESETS[setting] or {"Head"}
+    if preset[1] == "Random" then
+        local available = {}
+        for _, pn in ipairs(ALL_TARGET_PARTS) do
+            local p = char:FindFirstChild(pn); if p then table.insert(available, p) end
+        end
+        return #available > 0 and available[math.random(1, #available)] or nil
+    end
+    for _, pn in ipairs(preset) do local p = char:FindFirstChild(pn); if p then return p end end
+    for _, pn in ipairs(ALL_TARGET_PARTS) do local p = char:FindFirstChild(pn); if p then return p end end
+    return nil
+end
+
+-- ─── ENEMY SORTING ────────────────────────
 local function GetEnemiesSorted()
-    local list = {}
-    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local list    = {}
+    local myRoot  = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and IsAlive(player) then
             if Config.ProjectileTP.TeamCheck and isSameTeam(player) then continue end
@@ -337,46 +407,296 @@ local function GetEnemiesSorted()
             if root and myRoot then
                 local dist = (myRoot.Position - root.Position).Magnitude
                 if dist <= Config.ProjectileTP.MaxDistance then
-                    if Config.ProjectileTP.VisCheck then
-                        if not isVisibleFrom(myRoot.Position, root) then continue end
-                    end
+                    if Config.ProjectileTP.VisCheck and not isVisibleFrom(myRoot.Position, root) then continue end
                     table.insert(list, {player = player, dist = dist})
                 end
             end
         end
     end
-
     local priority = Config.ProjectileTP.Priority
     if priority == "Closest" then
-        table.sort(list, function(a, b) return a.dist < b.dist end)
+        table.sort(list, function(a,b) return a.dist < b.dist end)
     elseif priority == "Furthest" then
-        table.sort(list, function(a, b) return a.dist > b.dist end)
+        table.sort(list, function(a,b) return a.dist > b.dist end)
     elseif priority == "Random" then
         for i = #list, 2, -1 do
-            local j = math.random(i)
-            list[i], list[j] = list[j], list[i]
+            local j = math.random(i); list[i], list[j] = list[j], list[i]
         end
     elseif priority == "Lowest HP" then
-        table.sort(list, function(a, b)
+        table.sort(list, function(a,b)
             local ha = a.player.Character:FindFirstChildOfClass("Humanoid")
             local hb = b.player.Character:FindFirstChildOfClass("Humanoid")
             return (ha and ha.Health or 0) < (hb and hb.Health or 0)
         end)
     elseif priority == "Highest HP" then
-        table.sort(list, function(a, b)
+        table.sort(list, function(a,b)
             local ha = a.player.Character:FindFirstChildOfClass("Humanoid")
             local hb = b.player.Character:FindFirstChildOfClass("Humanoid")
             return (ha and ha.Health or 0) > (hb and hb.Health or 0)
         end)
     end
-
     local result = {}
-    for _, entry in ipairs(list) do table.insert(result, entry.player) end
+    for _, e in ipairs(list) do table.insert(result, e.player) end
     return result
+end
+
+local function GetClosestEnemy()
+    local list = GetEnemiesSorted()
+    return list[1]
 end
 
 local function CacheEnemies()
     EnemyCache = GetEnemiesSorted()
+end
+
+-- ═══════════════════════════════════════════
+-- AIMBOT SYSTEM
+-- Uses CameraController:SetRotation for smooth
+-- camera-based aim — same as rivals legitbot
+-- ═══════════════════════════════════════════
+
+local function getAimbotEffectiveFOV()
+    local f = Config.Aimbot.MaxFOV
+    if Config.Aimbot.DynamicFOV then f = f * (camera.FieldOfView / 70) end
+    return f
+end
+
+local function isInAimbotFOV(targetPart)
+    if not targetPart then return false end
+    local sp, onScreen = camera:WorldToViewportPoint(targetPart.Position)
+    if not onScreen then return false end
+    return (Vector2.new(sp.X, sp.Y) - getScreenCenter()).Magnitude <= getAimbotEffectiveFOV()
+end
+
+local function resetDelayedPos() delayedTargetPos = nil end
+
+local function getDelayedPos(targetPart, dt)
+    if not targetPart or not targetPart.Parent then delayedTargetPos = nil; return nil end
+    local realPos = targetPart.Position
+    if not delayedTargetPos then delayedTargetPos = realPos; return realPos end
+    local isJumping = false
+    pcall(function()
+        local hrpT = targetPart.Parent:FindFirstChild("HumanoidRootPart")
+        if hrpT then isJumping = hrpT.AssemblyLinearVelocity.Y > 2 end
+    end)
+    local bf = 60 * dt
+    local xA = math.clamp((1 - Config.Aimbot.XSmooth) * (1 + bf), 0.01, 1)
+    local yA = (isJumping and Config.Aimbot.JumpSmooth > 0)
+        and math.clamp((1 - Config.Aimbot.JumpSmooth) * (1 + bf), 0.01, 1)
+        or  math.clamp((1 - Config.Aimbot.YSmooth)    * (1 + bf), 0.01, 1)
+    delayedTargetPos = Vector3.new(
+        delayedTargetPos.X + (realPos.X - delayedTargetPos.X) * xA,
+        delayedTargetPos.Y + (realPos.Y - delayedTargetPos.Y) * yA,
+        delayedTargetPos.Z + (realPos.Z - delayedTargetPos.Z) * xA
+    )
+    return delayedTargetPos
+end
+
+local function isAimbotTargetStillValid(part)
+    if not part or not part.Parent then return false end
+    local hum = part.Parent:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return false end
+    if not isInAimbotFOV(part) then return false end
+    if Config.Aimbot.VisibleCheck and not isVisibleFrom(camera.CFrame.Position, part) then return false end
+    if Config.Aimbot.TeamCheck then
+        local p = Players:GetPlayerFromCharacter(part.Parent)
+        if p and isSameTeam(p) then return false end
+    end
+    return true
+end
+
+local function findNewAimbotTarget()
+    local c = getScreenCenter(); local eFOV = getAimbotEffectiveFOV(); local bp, bd = nil, eFOV
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LocalPlayer then continue end
+        if Config.Aimbot.TeamCheck and isSameTeam(p) then continue end
+        local ch = p.Character; if not ch then continue end
+        local h = ch:FindFirstChildOfClass("Humanoid"); if not h or h.Health <= 0 then continue end
+        local part = getBestPart(ch, Config.Aimbot.TargetPart); if not part then continue end
+        local sp, on = camera:WorldToScreenPoint(part.Position); if not on then continue end
+        local d = (Vector2.new(sp.X, sp.Y) - c).Magnitude; if d > eFOV then continue end
+        if Config.Aimbot.VisibleCheck and not isVisibleFrom(camera.CFrame.Position, part) then continue end
+        if d < bd then bd = d; bp = part end
+    end
+    return bp
+end
+
+-- ═══════════════════════════════════════════
+-- TRACK DUMMY SYSTEM
+-- Locks aimbot onto a shooting range dummy
+-- Dummies: workspace.ShootingRangeEntities children
+-- Index 99 = first dummy option
+-- Index 40 = second dummy option
+-- ═══════════════════════════════════════════
+
+local function getDummyTarget()
+    local entities = Workspace:FindFirstChild("ShootingRangeEntities")
+    if not entities then return nil end
+    local children = entities:GetChildren()
+    local idx      = Config.TrackDummy.DummyIndex
+
+    -- Clamp to valid range
+    idx = math.clamp(idx, 1, #children)
+    local dummy = children[idx]
+    if not dummy then return nil end
+
+    -- Try to get a targetable part from the dummy
+    local part = dummy:FindFirstChild("Head")
+        or dummy:FindFirstChild("HumanoidRootPart")
+        or dummy:FindFirstChild("UpperTorso")
+        or dummy:FindFirstChildOfClass("BasePart")
+
+    return part
+end
+
+local function getDummyBestPart()
+    local entities = Workspace:FindFirstChild("ShootingRangeEntities")
+    if not entities then return nil end
+    local children = entities:GetChildren()
+    local idx      = math.clamp(Config.TrackDummy.DummyIndex, 1, #children)
+    local dummy    = children[idx]
+    if not dummy then return nil end
+    return getBestPart(dummy, Config.Aimbot.TargetPart)
+        or dummy:FindFirstChild("HumanoidRootPart")
+        or dummy:FindFirstChildOfClass("BasePart")
+end
+
+-- ═══════════════════════════════════════════
+-- AIMBOT RENDER LOOP (called in RenderStepped)
+-- ═══════════════════════════════════════════
+local function runAimbot(dt)
+    if not Config.Aimbot.Enabled and not Config.TrackDummy.Enabled then return end
+
+    -- Update FOV circle
+    if fovCircle then
+        fovCircle.Position = getScreenCenter()
+        fovCircle.Radius   = getAimbotEffectiveFOV()
+        fovCircle.Visible  = Config.Aimbot.FOVStyle ~= "Invisible"
+            and Config.Aimbot.DrawFOV
+            and (Config.Aimbot.Enabled or Config.TrackDummy.Enabled)
+    end
+
+    if not CameraController then return end
+
+    -- ─── Track Dummy Override ─────────────
+    if Config.TrackDummy.Enabled then
+        local dummyPart = getDummyBestPart()
+        if dummyPart and dummyPart.Parent then
+            local aimPos = dummyPart.Position
+            pcall(function()
+                local cp  = camera.CFrame.Position
+                local du  = (aimPos - cp).Unit
+                local tP  = math.asin(math.clamp(du.Y, -1, 1))
+                local tY  = math.atan2(-du.X, -du.Z)
+                local sm  = math.clamp(1 / math.max(Config.Aimbot.Smoothness, 0.1), 0.01, 1)
+                local cur = CameraController.Rotation
+                CameraController:SetRotation(Vector2.new(
+                    cur.X + (tP - cur.X) * sm,
+                    cur.Y + angleDiff(cur.Y, tY) * sm
+                ))
+            end)
+        end
+        return  -- TrackDummy overrides normal aimbot
+    end
+
+    -- ─── Normal Aimbot ────────────────────
+    if not Config.Aimbot.Enabled then return end
+
+    if isInReaction then
+        reactionTimer = reactionTimer - dt
+        if reactionTimer <= 0 then isInReaction = false end
+    end
+
+    if not isInReaction then
+        if lockedTarget and not isAimbotTargetStillValid(lockedTarget) then
+            lockedTarget = nil; lockTimer = 0; resetDelayedPos()
+        end
+        if not lockedTarget then
+            local newT = findNewAimbotTarget()
+            if newT then
+                lockedTarget  = newT
+                lockTimer     = 0
+                isInReaction  = true
+                reactionTimer = Config.Aimbot.ReactionTime / 1000
+                resetDelayedPos()
+            end
+        end
+        if lockedTarget then
+            lockTimer = lockTimer + dt
+            if lockTimer > Config.Aimbot.ForgotTime then
+                lockedTarget = nil; lockTimer = 0; resetDelayedPos()
+            else
+                if isInAimbotFOV(lockedTarget) then
+                    local aimPos = getDelayedPos(lockedTarget, dt)
+                    if aimPos then
+                        local sm = math.clamp(1 / math.max(Config.Aimbot.Smoothness, 0.1), 0.01, 1)
+                        pcall(function()
+                            local cp  = camera.CFrame.Position
+                            local du  = (aimPos - cp).Unit
+                            local tP  = math.asin(math.clamp(du.Y, -1, 1))
+                            local tY  = math.atan2(-du.X, -du.Z)
+                            local cur = CameraController.Rotation
+                            CameraController:SetRotation(Vector2.new(
+                                cur.X + (tP - cur.X) * sm,
+                                cur.Y + angleDiff(cur.Y, tY) * sm
+                            ))
+                        end)
+                    end
+                else
+                    lockedTarget = nil; lockTimer = 0; resetDelayedPos()
+                end
+            end
+        end
+    end
+end
+
+-- ═══════════════════════════════════════════
+-- SOUND SPAM SYSTEM
+-- Uses Sound IDs from Gun module and AR viewmodel
+-- Creates a temporary Sound in workspace and plays it
+-- ═══════════════════════════════════════════
+local function playSoundOnce(soundId, volume)
+    pcall(function()
+        local part = Instance.new("Part")
+        part.Anchored     = true
+        part.CanCollide   = false
+        part.Transparency = 1
+        part.Size         = Vector3.new(1,1,1)
+        local myChar = LocalPlayer.Character
+        if myChar then
+            local root = myChar:FindFirstChild("HumanoidRootPart")
+            part.Position = root and root.Position or Vector3.new(0,0,0)
+        end
+        part.Parent = Workspace
+
+        local snd = Instance.new("Sound")
+        snd.SoundId  = soundId
+        snd.Volume   = volume or 1
+        snd.RollOffMaxDistance = 10000
+        snd.Parent   = part
+        snd:Play()
+
+        task.delay(5, function()
+            pcall(function() part:Destroy() end)
+        end)
+    end)
+end
+
+local function startSoundSpam()
+    if soundSpamTask then task.cancel(soundSpamTask); soundSpamTask = nil end
+    soundSpamTask = task.spawn(function()
+        while Config.SoundSpam.Enabled do
+            local id = (Config.SoundSpam.CustomId ~= "" and Config.SoundSpam.CustomId) or Config.SoundSpam.SoundId
+            playSoundOnce(id, Config.SoundSpam.Volume)
+            task.wait(math.max(0.01, Config.SoundSpam.Interval))
+        end
+        soundSpamTask = nil
+    end)
+end
+
+local function stopSoundSpam()
+    Config.SoundSpam.Enabled = false
+    if soundSpamTask then task.cancel(soundSpamTask); soundSpamTask = nil end
 end
 
 -- ═══════════════════════════════════════════
@@ -389,19 +709,19 @@ VoidMethods["Extreme Desync"] = function()
     local range     = 2147483646 * intensity
     local deadZone  = 1147483646 * intensity
     hrp.CFrame = CFrame.new(
-        betterRandom(-range, range, -deadZone, deadZone),
-        betterRandom(-range, range, -deadZone, deadZone),
-        betterRandom(-range, range, -deadZone, deadZone)
-    ) * CFrame.Angles(math.rad(math.pi), math.rad(math.pi), math.rad(math.pi))
+        betterRandom(-range,range,-deadZone,deadZone),
+        betterRandom(-range,range,-deadZone,deadZone),
+        betterRandom(-range,range,-deadZone,deadZone)
+    ) * CFrame.Angles(math.rad(math.pi),math.rad(math.pi),math.rad(math.pi))
     hrp.AssemblyLinearVelocity = Vector3.new(
-        betterRandom(-range, range, -deadZone, deadZone),
-        betterRandom(-range, range, -deadZone, deadZone),
-        betterRandom(-range, range, -deadZone, deadZone)
+        betterRandom(-range,range,-deadZone,deadZone),
+        betterRandom(-range,range,-deadZone,deadZone),
+        betterRandom(-range,range,-deadZone,deadZone)
     )
     hrp.AssemblyAngularVelocity = Vector3.new(
-        betterRandom(-range, range, -deadZone, deadZone),
-        betterRandom(-range, range, -deadZone, deadZone),
-        betterRandom(-range, range, -deadZone, deadZone)
+        betterRandom(-range,range,-deadZone,deadZone),
+        betterRandom(-range,range,-deadZone,deadZone),
+        betterRandom(-range,range,-deadZone,deadZone)
     )
 end
 
@@ -409,36 +729,33 @@ VoidMethods["Projectile TP"] = function()
     local altitude   = Config.VoidSpam.Altitude
     local currentPos = clientCFrame.Position
     hrp.CFrame = CFrame.new(
-        currentPos.X + math.random(-100, 100),
-        altitude,
-        currentPos.Z + math.random(-100, 100)
+        currentPos.X + math.random(-100,100), altitude, currentPos.Z + math.random(-100,100)
     )
-    hrp.AssemblyLinearVelocity  = Vector3.new(0, 0, 0)
-    hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    hrp.AssemblyLinearVelocity  = Vector3.new(0,0,0)
+    hrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
 end
 
 VoidMethods["Orbital Void"] = function()
-    local altitude = Config.VoidSpam.Altitude
-    local t = tick(); local radius = 50
-    hrp.CFrame = CFrame.new(math.sin(t*2)*radius, altitude, math.cos(t*2)*radius)
+    local t = tick(); local r = 50
+    hrp.CFrame = CFrame.new(math.sin(t*2)*r, Config.VoidSpam.Altitude, math.cos(t*2)*r)
     hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
 end
 
 VoidMethods["Controlled Void"] = function()
-    local altitude = Config.VoidSpam.Altitude
     hrp.CFrame = CFrame.new(
-        betterRandom(-1000,1000,-500,500), altitude, betterRandom(-1000,1000,-500,500)
+        betterRandom(-1000,1000,-500,500),
+        Config.VoidSpam.Altitude,
+        betterRandom(-1000,1000,-500,500)
     )
     hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
 end
 
 VoidMethods["Seizure Mode"] = function()
     local positions = {
-        Vector3.new(100000,100000,100000), Vector3.new(-100000,100000,-100000),
-        Vector3.new(100000,-100000,100000), Vector3.new(-100000,-100000,-100000),
+        Vector3.new(100000,100000,100000),   Vector3.new(-100000,100000,-100000),
+        Vector3.new(100000,-100000,100000),  Vector3.new(-100000,-100000,-100000),
     }
-    local index = math.floor(tick()*10) % #positions + 1
-    hrp.CFrame = CFrame.new(positions[index])
+    hrp.CFrame = CFrame.new(positions[math.floor(tick()*10) % 4 + 1])
     hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
 end
 
@@ -448,10 +765,8 @@ end
 Connections.PureDesyncHeartbeat = RunService.Heartbeat:Connect(function()
     if not Config.PureDesync.Enabled then return end
     pcall(function()
-        pureHrp      = LocalPlayer.Character.HumanoidRootPart
-        pureClientC  = pureHrp.CFrame
-        pureClientV  = pureHrp.AssemblyLinearVelocity
-        pureClientVA = pureHrp.AssemblyAngularVelocity
+        pureHrp = LocalPlayer.Character.HumanoidRootPart
+        pureClientC = pureHrp.CFrame; pureClientV = pureHrp.AssemblyLinearVelocity; pureClientVA = pureHrp.AssemblyAngularVelocity
         pureHrp.CFrame = CFrame.new(
             betterRandom(-2147483646,2147483646,-1147483646,1147483646),
             betterRandom(-2147483646,2147483646,-1147483646,1147483646),
@@ -473,7 +788,7 @@ end)
 RunService:BindToRenderStep("PureDesyncRestore", Enum.RenderPriority.First.Value, function()
     if pureHrp and Config.PureDesync.Enabled then
         pcall(function()
-            pureHrp.CFrame                  = pureClientC
+            pureHrp.CFrame = pureClientC
             pureHrp.AssemblyLinearVelocity  = pureClientV
             pureHrp.AssemblyAngularVelocity = pureClientVA
         end)
@@ -481,72 +796,55 @@ RunService:BindToRenderStep("PureDesyncRestore", Enum.RenderPriority.First.Value
 end)
 
 -- ═══════════════════════════════════════════
--- PULSE DESYNC (NEW)
--- Alternates between void position (hide phase)
--- and real position (attack phase) on a timer
--- Best used with Projectile TP — hide from server
--- then fire during attack window
+-- PULSE DESYNC
 -- ═══════════════════════════════════════════
 local function startPulseDesync()
     if pulseTask then task.cancel(pulseTask); pulseTask = nil end
-
     pulseTask = task.spawn(function()
         while Config.PulseDesync.Enabled do
             local char = LocalPlayer.Character
             if char then
                 local root = char:FindFirstChild("HumanoidRootPart")
                 if root then
-                    pulseHrp    = root
-                    pulseRealCF = root.CFrame
-                    pulseRealV  = root.AssemblyLinearVelocity
-                    pulseRealVA = root.AssemblyAngularVelocity
-
-                    -- HIDE PHASE: send to void altitude
+                    pulseHrp = root; pulseRealCF = root.CFrame
+                    pulseRealV = root.AssemblyLinearVelocity; pulseRealVA = root.AssemblyAngularVelocity
                     pulsePhase = "hide"
                     root.CFrame = CFrame.new(
-                        pulseRealCF.Position.X + math.random(-50, 50),
+                        pulseRealCF.Position.X + math.random(-50,50),
                         Config.PulseDesync.VoidAltitude,
-                        pulseRealCF.Position.Z + math.random(-50, 50)
+                        pulseRealCF.Position.Z + math.random(-50,50)
                     )
-                    root.AssemblyLinearVelocity  = Vector3.new(0, 0, 0)
-                    root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-
+                    root.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                    root.AssemblyAngularVelocity = Vector3.new(0,0,0)
                     task.wait(Config.PulseDesync.HideTime)
-
-                    -- ATTACK PHASE: restore real position (shoot window)
                     pulsePhase = "attack"
                     if pulseHrp and pulseHrp.Parent then
                         pcall(function()
-                            pulseHrp.CFrame                  = pulseRealCF
+                            pulseHrp.CFrame = pulseRealCF
                             pulseHrp.AssemblyLinearVelocity  = pulseRealV
                             pulseHrp.AssemblyAngularVelocity = pulseRealVA
                         end)
                     end
-
                     task.wait(Config.PulseDesync.AttackTime)
                 end
             end
-
             if not Config.PulseDesync.Enabled then break end
         end
-        pulseTask = nil
-        pulsePhase = "attack"
+        pulseTask = nil; pulsePhase = "attack"
     end)
 end
 
 local function stopPulseDesync()
     Config.PulseDesync.Enabled = false
     if pulseTask then task.cancel(pulseTask); pulseTask = nil end
-    -- Restore position
     if pulseHrp and pulseRealCF and pulseHrp.Parent then
         pcall(function()
-            pulseHrp.CFrame                  = pulseRealCF
+            pulseHrp.CFrame = pulseRealCF
             pulseHrp.AssemblyLinearVelocity  = pulseRealV or Vector3.new(0,0,0)
             pulseHrp.AssemblyAngularVelocity = pulseRealVA or Vector3.new(0,0,0)
         end)
     end
-    pulsePhase = "attack"
-    pulseHrp   = nil
+    pulsePhase = "attack"; pulseHrp = nil
 end
 
 -- ═══════════════════════════════════════════
@@ -556,12 +854,8 @@ Connections.VoidHeartbeat = RunService.Heartbeat:Connect(function()
     if not Config.VoidSpam.Enabled then return end
     pcall(function()
         hrp = LocalPlayer.Character.HumanoidRootPart
-        clientCFrame          = hrp.CFrame
-        clientVelocity        = hrp.AssemblyLinearVelocity
-        clientAngularVelocity = hrp.AssemblyAngularVelocity
-        if wtVoidActive then return end
-        -- Don't run if Pulse Desync is managing the position
-        if Config.PulseDesync.Enabled then return end
+        clientCFrame = hrp.CFrame; clientVelocity = hrp.AssemblyLinearVelocity; clientAngularVelocity = hrp.AssemblyAngularVelocity
+        if wtVoidActive or Config.PulseDesync.Enabled then return end
         local method = VoidMethods[Config.VoidSpam.Method]
         if method then method() end
     end)
@@ -570,44 +864,31 @@ end)
 Connections.VoidRender = RunService:BindToRenderStep("VoidRestore", Enum.RenderPriority.First.Value, function()
     if hrp and Config.VoidSpam.Enabled and not Config.PulseDesync.Enabled then
         pcall(function()
-            hrp.CFrame                  = clientCFrame
+            hrp.CFrame = clientCFrame
             hrp.AssemblyLinearVelocity  = clientVelocity
             hrp.AssemblyAngularVelocity = clientAngularVelocity
         end)
     end
 end)
 
--- Weapon Tracker Void (send to boost altitude when enemy shoots)
 Connections.WeaponTrackerVoid = RunService.Heartbeat:Connect(function()
     if not Config.WeaponTracker.Enabled or not wtVoidActive then return end
     if not Config.VoidSpam.Enabled then return end
     pcall(function()
-        local myChar = LocalPlayer.Character
-        if not myChar then return end
-        local myRoot = myChar:FindFirstChild("HumanoidRootPart")
-        if not myRoot then return end
+        local myChar = LocalPlayer.Character; if not myChar then return end
+        local myRoot = myChar:FindFirstChild("HumanoidRootPart"); if not myRoot then return end
         local realCF = clientCFrame or myRoot.CFrame
-        myRoot.CFrame = CFrame.new(
-            realCF.Position.X + math.random(-200, 200),
-            Config.WeaponTracker.VoidAltitude,
-            realCF.Position.Z + math.random(-200, 200)
-        )
-        myRoot.AssemblyLinearVelocity  = Vector3.new(0,0,0)
-        myRoot.AssemblyAngularVelocity = Vector3.new(0,0,0)
+        myRoot.CFrame = CFrame.new(realCF.Position.X + math.random(-200,200), Config.WeaponTracker.VoidAltitude, realCF.Position.Z + math.random(-200,200))
+        myRoot.AssemblyLinearVelocity = Vector3.new(0,0,0); myRoot.AssemblyAngularVelocity = Vector3.new(0,0,0)
     end)
 end)
 
 -- ═══════════════════════════════════════════
--- PROJECTILE TP SYSTEM (IMPROVED)
--- Now respects Priority, TeamCheck, VisCheck,
--- MaxDistance, HitboxSize, ShootAttempts
--- Only fires during "attack" phase if PulseDesync active
+-- PROJECTILE TP
 -- ═══════════════════════════════════════════
 local function FindCoreProjectile()
     for _, obj in ipairs(Workspace:GetChildren()) do
-        if obj.Name == "CoreProjectile" and obj:FindFirstChild("TouchInterest") then
-            return obj
-        end
+        if obj.Name == "CoreProjectile" and obj:FindFirstChild("TouchInterest") then return obj end
     end
     return nil
 end
@@ -621,79 +902,42 @@ local function GetEnemyHitbox(enemy)
         or enemy.Character:FindFirstChild("Head")
 end
 
--- Creates a temporary expanded hitbox part near the enemy for easier hit detection
 local function createExpandedHitbox(enemy)
     if not enemy or not enemy.Character then return nil end
-    local root = enemy.Character:FindFirstChild("HumanoidRootPart")
-    if not root then return nil end
-
+    local root = enemy.Character:FindFirstChild("HumanoidRootPart"); if not root then return nil end
     local size = Config.ProjectileTP.HitboxSize
     local hitbox = Instance.new("Part")
-    hitbox.Name         = "_ExpandedHitbox"
-    hitbox.Size         = Vector3.new(size, size, size)
-    hitbox.CFrame       = root.CFrame
-    hitbox.Anchored     = true
-    hitbox.CanCollide   = false
-    hitbox.Transparency = 1
-    hitbox.Parent       = Workspace
-
-    -- Auto destroy after 1 second
-    task.delay(1, function()
-        pcall(function() hitbox:Destroy() end)
-    end)
-
+    hitbox.Name="._ExpandedHitbox"; hitbox.Size=Vector3.new(size,size,size)
+    hitbox.CFrame=root.CFrame; hitbox.Anchored=true; hitbox.CanCollide=false; hitbox.Transparency=1; hitbox.Parent=Workspace
+    task.delay(1, function() pcall(function() hitbox:Destroy() end) end)
     return hitbox
 end
 
 Connections.ProjectileTP = RunService.Heartbeat:Connect(function()
     if not Config.ProjectileTP.Enabled then return end
-
-    -- If Pulse Desync is running, only fire during attack phase
     if Config.PulseDesync.Enabled and pulsePhase ~= "attack" then return end
-
-    -- If Ragebot hide/attack sync is running, only fire during attack phase
     if Config.Ragebot.Enabled and Config.Ragebot.VoidSpamSync and ragebotPhase ~= "attack" then return end
-
     pcall(function()
-        local projectile = FindCoreProjectile()
-        if not projectile then return end
-
-        if Config.ProjectileTP.Cache and not ProjectileCache[projectile] then
-            ProjectileCache[projectile] = true
-        end
-
+        local projectile = FindCoreProjectile(); if not projectile then return end
+        if Config.ProjectileTP.Cache and not ProjectileCache[projectile] then ProjectileCache[projectile] = true end
         CacheEnemies()
-
         for _, enemy in ipairs(EnemyCache) do
-            local hitbox = GetEnemyHitbox(enemy)
-            if not hitbox then continue end
-
-            -- Shoot attempts (from image: shoot attempts slider)
+            local hitbox = GetEnemyHitbox(enemy); if not hitbox then continue end
             for attempt = 1, math.max(1, Config.ProjectileTP.ShootAttempts) do
                 firetouchinterest(projectile, hitbox, 0)
                 task.wait(Config.ProjectileTP.LoopDelay)
                 firetouchinterest(projectile, hitbox, 1)
-
-                -- Also try with expanded hitbox if size > default
                 if Config.ProjectileTP.HitboxSize > 5 then
                     local expanded = createExpandedHitbox(enemy)
-                    if expanded then
-                        firetouchinterest(projectile, expanded, 0)
-                        task.wait(0.01)
-                        firetouchinterest(projectile, expanded, 1)
-                    end
+                    if expanded then firetouchinterest(projectile, expanded, 0); task.wait(0.01); firetouchinterest(projectile, expanded, 1) end
                 end
             end
         end
     end)
 end)
 
--- ═══════════════════════════════════════════
--- AUTO SHOOT
--- ═══════════════════════════════════════════
 Connections.AutoShoot = RunService.Heartbeat:Connect(function()
     if not Config.ProjectileTP.AutoShoot then return end
-    -- If Pulse Desync is running, only auto-shoot during attack phase
     if Config.PulseDesync.Enabled and pulsePhase ~= "attack" then return end
     pcall(function()
         local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
@@ -702,71 +946,40 @@ Connections.AutoShoot = RunService.Heartbeat:Connect(function()
 end)
 
 -- ═══════════════════════════════════════════
--- RAGEBOT (IMPROVED)
--- Now has hide/attack timing from the image
--- Persistent across round transitions
+-- RAGEBOT
 -- ═══════════════════════════════════════════
-local ragebotLoopTask = nil
-
-local function ragebotGetTarget()
-    -- Use same priority system as Projectile TP
-    local enemies = GetEnemiesSorted()
-    if #enemies > 0 then return enemies[1] end
-    return nil
-end
-
 local function startRagebotLoop()
     if ragebotLoopTask then task.cancel(ragebotLoopTask); ragebotLoopTask = nil end
-
     ragebotLoopTask = task.spawn(function()
         while Config.Ragebot.Enabled do
-            local enemy  = ragebotGetTarget()
-            local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-
+            local enemies = GetEnemiesSorted()
+            local enemy   = enemies[1]
+            local myRoot  = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if enemy and enemy.Character and myRoot then
                 local enemyRoot = enemy.Character:FindFirstChild("HumanoidRootPart")
-
                 if enemyRoot then
-                    ragebotCurrentTarget = enemy
-
                     if Config.Ragebot.VoidSpamSync then
-                        -- HIDE PHASE: orbit enemy at void altitude (server can't hit you)
                         ragebotPhase = "hide"
                         if Config.Ragebot.ClientTP then
-                            local t      = tick() * Config.Ragebot.OrbitSpeed
-                            local radius = Config.Ragebot.OrbitRadius
-                            enemyRoot.CFrame = CFrame.new(
-                                myRoot.Position + Vector3.new(math.sin(t)*radius, 0, math.cos(t)*radius)
-                            )
+                            local t = tick() * Config.Ragebot.OrbitSpeed; local r = Config.Ragebot.OrbitRadius
+                            enemyRoot.CFrame = CFrame.new(myRoot.Position + Vector3.new(math.sin(t)*r, 0, math.cos(t)*r))
                         end
                         task.wait(Config.Ragebot.HideTime)
-
-                        -- ATTACK PHASE: real position, fire projectiles
                         ragebotPhase = "attack"
                         task.wait(Config.Ragebot.AttackTime)
                     else
-                        -- Simple orbit without timing
                         ragebotPhase = "attack"
                         if Config.Ragebot.ClientTP then
-                            local t      = tick() * Config.Ragebot.OrbitSpeed
-                            local radius = Config.Ragebot.OrbitRadius
-                            enemyRoot.CFrame = CFrame.new(
-                                myRoot.Position + Vector3.new(math.sin(t)*radius, 0, math.cos(t)*radius)
-                            )
+                            local t = tick() * Config.Ragebot.OrbitSpeed; local r = Config.Ragebot.OrbitRadius
+                            enemyRoot.CFrame = CFrame.new(myRoot.Position + Vector3.new(math.sin(t)*r, 0, math.cos(t)*r))
                         end
                         task.wait(0.05)
                     end
                 end
-            else
-                ragebotPhase = "attack"
-                task.wait(0.1)
-            end
-
+            else ragebotPhase = "attack"; task.wait(0.1) end
             if not Config.Ragebot.Enabled then break end
         end
-
-        ragebotLoopTask = nil
-        ragebotPhase    = "attack"
+        ragebotLoopTask = nil; ragebotPhase = "attack"
     end)
 end
 
@@ -775,46 +988,32 @@ local function stopRagebotLoop()
     ragebotPhase = "attack"
 end
 
--- Ragebot persistence: re-enable after round/character reset
 local function setupRagebotPersistence()
     if ragebotPersistConn then ragebotPersistConn:Disconnect() end
-
     ragebotPersistConn = LocalPlayer.CharacterAdded:Connect(function(character)
-        if not Config.Ragebot.PersistAcrossRounds then return end
-        if not ragebotWasEnabled then return end
-
-        -- Wait for character to fully load
-        character:WaitForChild("HumanoidRootPart", 10)
-        task.wait(1.5)
-
-        -- Re-enable ragebot
+        if not Config.Ragebot.PersistAcrossRounds or not ragebotWasEnabled then return end
+        character:WaitForChild("HumanoidRootPart", 10); task.wait(1.5)
         if not Config.Ragebot.Enabled then
-            Config.Ragebot.Enabled = true
-            startRagebotLoop()
+            Config.Ragebot.Enabled = true; startRagebotLoop()
             Library:Notify("Ragebot auto-resumed after round", 3)
         end
     end)
 end
 
--- Track when ragebot was manually enabled
 local function enableRagebot()
-    Config.Ragebot.Enabled = true
-    ragebotWasEnabled      = true
-    startRagebotLoop()
-    setupRagebotPersistence()
+    Config.Ragebot.Enabled = true; ragebotWasEnabled = true
+    startRagebotLoop(); setupRagebotPersistence()
 end
 
 local function disableRagebot()
-    Config.Ragebot.Enabled = false
-    ragebotWasEnabled      = false
-    stopRagebotLoop()
+    Config.Ragebot.Enabled = false; ragebotWasEnabled = false; stopRagebotLoop()
 end
 
 -- ═══════════════════════════════════════════
--- WEAPON TRACKER SYSTEM
+-- WEAPON TRACKER
 -- ═══════════════════════════════════════════
-local WT_START_NAMES = {"StartShooting", "Shooting"}
-local WT_STOP_NAMES  = {"StopShooting", "Reload", "StartReloading"}
+local WT_START_NAMES = {"StartShooting","Shooting"}
+local WT_STOP_NAMES  = {"StopShooting","Reload","StartReloading"}
 
 local function wtIsEnemy(player)
     if player == LocalPlayer then return false end
@@ -823,33 +1022,23 @@ local function wtIsEnemy(player)
 end
 
 local function wtOnEnemyShootStart(shooter)
-    if not Config.WeaponTracker.Enabled then return end
-    if not wtIsEnemy(shooter) then return end
-    wtShootingPlayers[shooter] = true
-    wtEnemyShooting = true
-    wtLastShooter   = shooter
-    wtVoidActive    = true
+    if not Config.WeaponTracker.Enabled or not wtIsEnemy(shooter) then return end
+    wtShootingPlayers[shooter] = true; wtEnemyShooting = true; wtLastShooter = shooter; wtVoidActive = true
     if wtTeleportTask then task.cancel(wtTeleportTask); wtTeleportTask = nil end
 end
 
 local function wtOnEnemyShootStop(shooter)
     if not Config.WeaponTracker.Enabled then return end
     wtShootingPlayers[shooter] = nil
-    local anyStillShooting = false
-    for _ in pairs(wtShootingPlayers) do anyStillShooting = true; break end
-
-    if not anyStillShooting then
-        wtEnemyShooting = false
-        wtVoidActive    = false
-        local shooter_ref = shooter
+    local any = false; for _ in pairs(wtShootingPlayers) do any = true; break end
+    if not any then
+        wtEnemyShooting = false; wtVoidActive = false
+        local sr = shooter
         wtTeleportTask = task.delay(Config.WeaponTracker.TeleportDelay, function()
-            if not Config.WeaponTracker.Enabled then return end
-            if not IsAlive(shooter_ref) then return end
-            local enemyRoot = shooter_ref.Character and shooter_ref.Character:FindFirstChild("HumanoidRootPart")
-            local myRoot    = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if enemyRoot and myRoot then
-                pcall(function() myRoot.CFrame = enemyRoot.CFrame end)
-            end
+            if not Config.WeaponTracker.Enabled or not IsAlive(sr) then return end
+            local er = sr.Character and sr.Character:FindFirstChild("HumanoidRootPart")
+            local mr = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if er and mr then pcall(function() mr.CFrame = er.CFrame end) end
             wtTeleportTask = nil
         end)
     end
@@ -867,9 +1056,7 @@ local function startWeaponTrackerHook()
                     local char = p.Character
                     if char then
                         local ok2, result = pcall(function()
-                            if typeof(fighterOrPlayer) == "Instance" then
-                                return fighterOrPlayer:IsDescendantOf(char)
-                            end
+                            if typeof(fighterOrPlayer) == "Instance" then return fighterOrPlayer:IsDescendantOf(char) end
                             return fighterOrPlayer == p
                         end)
                         if ok2 and result then shooter = p; break end
@@ -878,29 +1065,19 @@ local function startWeaponTrackerHook()
             end
             if not shooter then shooter = GetClosestEnemy() end
             if not shooter then return end
-
             local actionStr = tostring(enumAction)
             local isStart, isStop = false, false
-            for _, name in ipairs(WT_START_NAMES) do
-                if string.find(actionStr, name, 1, true) then isStart = true; break end
-            end
-            if not isStart then
-                for _, name in ipairs(WT_STOP_NAMES) do
-                    if string.find(actionStr, name, 1, true) then isStop = true; break end
-                end
-            end
-            if isStart then wtOnEnemyShootStart(shooter)
-            elseif isStop then wtOnEnemyShootStop(shooter) end
+            for _, name in ipairs(WT_START_NAMES) do if string.find(actionStr, name, 1, true) then isStart = true; break end end
+            if not isStart then for _, name in ipairs(WT_STOP_NAMES) do if string.find(actionStr, name, 1, true) then isStop = true; break end end end
+            if isStart then wtOnEnemyShootStart(shooter) elseif isStop then wtOnEnemyShootStop(shooter) end
         end)
-        table.insert(antiOOBConnections, conn)
-        wtHookActive = true
+        table.insert(antiOOBConnections, conn); wtHookActive = true
     end)
     if not ok then Library:Notify("Weapon Tracker: hook failed", 3) end
 end
 
 local function stopWeaponTrackerHook()
-    wtHookActive = false; wtEnemyShooting = false; wtVoidActive = false
-    wtShootingPlayers = {}
+    wtHookActive = false; wtEnemyShooting = false; wtVoidActive = false; wtShootingPlayers = {}
     if wtTeleportTask then task.cancel(wtTeleportTask); wtTeleportTask = nil end
 end
 
@@ -908,12 +1085,8 @@ end
 -- ANTI OOB
 -- ═══════════════════════════════════════════
 local function antiOOB_HideOOBParts(hide)
-    for _, part in ipairs(CollectionService:GetTagged("OutOfBoundsPart")) do
-        pcall(function() if hide then part.Transparency = 1 end end)
-    end
-    for _, part in ipairs(CollectionService:GetTagged("OutOfBoundsSafePart")) do
-        pcall(function() if hide then part.Transparency = 1 end end)
-    end
+    for _, part in ipairs(CollectionService:GetTagged("OutOfBoundsPart")) do pcall(function() if hide then part.Transparency=1 end end) end
+    for _, part in ipairs(CollectionService:GetTagged("OutOfBoundsSafePart")) do pcall(function() if hide then part.Transparency=1 end end) end
 end
 
 local function antiOOB_PatchModule()
@@ -922,10 +1095,9 @@ local function antiOOB_PatchModule()
         local OOBMachine = require(ReplicatedStorage.Modules.OutOfBoundsMachine)
         if OOBMachine then
             if OOBMachine.IsOutOfBounds then OOBMachine.IsOutOfBounds = function() return nil end end
-            if OOBMachine.Update        then OOBMachine.Update = function() end end
+            if OOBMachine.Update then OOBMachine.Update = function() end end
         end
-        antiOOBModulePatched = true
-        Library:Notify("Anti OOB: Module patched ✓", 2)
+        antiOOBModulePatched = true; Library:Notify("Anti OOB: Module patched ✓", 2)
     end)
 end
 
@@ -940,8 +1112,7 @@ local function antiOOB_SpoofRemote()
             end
             return antiOOBHookRef(self, ...)
         end))
-        antiOOBHookActive = true
-        Library:Notify("Anti OOB: Remote spoof ✓", 2)
+        antiOOBHookActive = true; Library:Notify("Anti OOB: Remote spoof ✓", 2)
     end)
     if not ok then Library:Notify("Anti OOB: hookmetamethod not supported", 3) end
 end
@@ -953,22 +1124,16 @@ local function antiOOB_StopSpoofRemote()
 end
 
 local function startAntiOOB()
-    if Config.AntiOOB.SpoofRemote  then antiOOB_SpoofRemote()      end
-    if Config.AntiOOB.PatchModule   then antiOOB_PatchModule()      end
+    if Config.AntiOOB.SpoofRemote then antiOOB_SpoofRemote() end
+    if Config.AntiOOB.PatchModule  then antiOOB_PatchModule() end
     if Config.AntiOOB.HideOOBParts then antiOOB_HideOOBParts(true) end
-    local c1 = CollectionService:GetInstanceAddedSignal("OutOfBoundsPart"):Connect(function(part)
-        if Config.AntiOOB.Enabled and Config.AntiOOB.HideOOBParts then pcall(function() part.Transparency=1 end) end
-    end)
-    local c2 = CollectionService:GetInstanceAddedSignal("OutOfBoundsSafePart"):Connect(function(part)
-        if Config.AntiOOB.Enabled and Config.AntiOOB.HideOOBParts then pcall(function() part.Transparency=1 end) end
-    end)
-    table.insert(antiOOBConnections, c1)
-    table.insert(antiOOBConnections, c2)
+    local c1 = CollectionService:GetInstanceAddedSignal("OutOfBoundsPart"):Connect(function(part) if Config.AntiOOB.Enabled and Config.AntiOOB.HideOOBParts then pcall(function() part.Transparency=1 end) end end)
+    local c2 = CollectionService:GetInstanceAddedSignal("OutOfBoundsSafePart"):Connect(function(part) if Config.AntiOOB.Enabled and Config.AntiOOB.HideOOBParts then pcall(function() part.Transparency=1 end) end end)
+    table.insert(antiOOBConnections, c1); table.insert(antiOOBConnections, c2)
 end
 
 local function stopAntiOOB()
-    Config.AntiOOB.Enabled = false
-    antiOOB_StopSpoofRemote()
+    Config.AntiOOB.Enabled = false; antiOOB_StopSpoofRemote()
     for _, conn in ipairs(antiOOBConnections) do pcall(function() conn:Disconnect() end) end
     antiOOBConnections = {}
 end
@@ -978,25 +1143,16 @@ end
 -- ═══════════════════════════════════════════
 local function triggerExplosion(position, size, pitchVariance)
     if not ExplosionEffectFn then return end
-    pcall(function()
-        ExplosionEffectFn(
-            position or Vector3.new(0,0,0),
-            size or Config.ExplosionEffect.Size,
-            pitchVariance or (0.9 + Config.ExplosionEffect.SpeedVariance * math.random())
-        )
-    end)
+    pcall(function() ExplosionEffectFn(position or Vector3.new(0,0,0), size or Config.ExplosionEffect.Size, pitchVariance or (0.9 + Config.ExplosionEffect.SpeedVariance * math.random())) end)
 end
 
 local function hookPlayerForExplosion(player)
     if player == LocalPlayer then return end
     local function watchChar(char)
-        local hum = char:WaitForChild("Humanoid", 5)
-        if not hum then return end
+        local hum = char:WaitForChild("Humanoid", 5); if not hum then return end
         local conn = hum.Died:Connect(function()
-            if not Config.ExplosionEffect.Enabled then return end
-            if not Config.ExplosionEffect.OnDeath then return end
-            local root = char:FindFirstChild("HumanoidRootPart")
-            if root then triggerExplosion(root.Position, Config.ExplosionEffect.Size) end
+            if not Config.ExplosionEffect.Enabled or not Config.ExplosionEffect.OnDeath then return end
+            local root = char:FindFirstChild("HumanoidRootPart"); if root then triggerExplosion(root.Position, Config.ExplosionEffect.Size) end
         end)
         table.insert(explosionDeathConnections, conn)
     end
@@ -1013,13 +1169,9 @@ local function startLoopExplosions()
     loopExplosionTask = task.spawn(function()
         while Config.ExplosionEffect.Enabled and Config.ExplosionEffect.LoopExplosions do
             pcall(function()
-                local char = LocalPlayer.Character
-                if char then
-                    local root = char:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        triggerExplosion(root.Position + Vector3.new(math.random(-5,5),math.random(0,3),math.random(-5,5)), Config.ExplosionEffect.Size * 0.5)
-                    end
-                end
+                local char = LocalPlayer.Character; if not char then return end
+                local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+                triggerExplosion(root.Position + Vector3.new(math.random(-5,5),math.random(0,3),math.random(-5,5)), Config.ExplosionEffect.Size*0.5)
             end)
             task.wait(Config.ExplosionEffect.LoopInterval)
         end
@@ -1031,67 +1183,35 @@ local function stopLoopExplosions()
     if loopExplosionTask then task.cancel(loopExplosionTask); loopExplosionTask = nil end
 end
 
-local function explodeAtSelf()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if root then triggerExplosion(root.Position, Config.ExplosionEffect.Size) end
-end
-
-local function explodeAtEnemy()
-    local enemy = GetClosestEnemy()
-    if enemy and enemy.Character then
-        local root = enemy.Character:FindFirstChild("HumanoidRootPart")
-        if root then triggerExplosion(root.Position, Config.ExplosionEffect.Size) end
-    end
-end
-
 -- ═══════════════════════════════════════════
 -- TRACER EFFECTS
 -- ═══════════════════════════════════════════
 local function playTracer(fromPos, toPos, color, width, duration)
     if not TracerEffectModule then return end
-    pcall(function()
-        TracerEffectModule:Play(fromPos, toPos, color or Config.TracerEffect.Color, width or Config.TracerEffect.Width, duration or Config.TracerEffect.Duration)
-    end)
+    pcall(function() TracerEffectModule:Play(fromPos, toPos, color or Config.TracerEffect.Color, width or Config.TracerEffect.Width, duration or Config.TracerEffect.Duration) end)
 end
 
 local function startTracerShootHook()
     for _, conn in ipairs(tracerConnections) do pcall(function() conn:Disconnect() end) end
     tracerConnections = {}
-    local char = LocalPlayer.Character
-    if not char then return end
-
+    local char = LocalPlayer.Character; if not char then return end
     local function hookTool(tool)
         local conn = tool.Activated:Connect(function()
-            if not Config.TracerEffect.Enabled then return end
-            if not Config.TracerEffect.OnShoot then return end
+            if not Config.TracerEffect.Enabled or not Config.TracerEffect.OnShoot then return end
             pcall(function()
-                local myRoot = char:FindFirstChild("HumanoidRootPart")
-                if not myRoot then return end
+                local myRoot = char:FindFirstChild("HumanoidRootPart"); if not myRoot then return end
                 local toPos
                 if Config.TracerEffect.TraceToEnemy then
                     local enemy = GetClosestEnemy()
-                    if enemy and enemy.Character then
-                        local eRoot = enemy.Character:FindFirstChild("HumanoidRootPart")
-                        if eRoot then toPos = eRoot.Position end
-                    end
-                else
-                    local cam = Workspace.CurrentCamera
-                    toPos = cam.CFrame.Position + cam.CFrame.LookVector * 200
-                end
+                    if enemy and enemy.Character then local eRoot = enemy.Character:FindFirstChild("HumanoidRootPart"); if eRoot then toPos = eRoot.Position end end
+                else local cam = Workspace.CurrentCamera; toPos = cam.CFrame.Position + cam.CFrame.LookVector * 200 end
                 if toPos then playTracer(myRoot.Position, toPos) end
             end)
         end)
         table.insert(tracerConnections, conn)
     end
-
-    for _, child in ipairs(char:GetChildren()) do
-        if child:IsA("Tool") then hookTool(child) end
-    end
-    local conn = char.ChildAdded:Connect(function(child)
-        if child:IsA("Tool") then hookTool(child) end
-    end)
+    for _, child in ipairs(char:GetChildren()) do if child:IsA("Tool") then hookTool(child) end end
+    local conn = char.ChildAdded:Connect(function(child) if child:IsA("Tool") then hookTool(child) end end)
     table.insert(tracerConnections, conn)
 end
 
@@ -1100,42 +1220,21 @@ local function stopTracers()
     tracerConnections = {}
 end
 
-local function drawManualTracer()
-    local myChar = LocalPlayer.Character
-    if not myChar then return end
-    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return end
-    local enemy = GetClosestEnemy()
-    if not enemy or not enemy.Character then Library:Notify("No enemy found for tracer", 2); return end
-    local eRoot = enemy.Character:FindFirstChild("HumanoidRootPart")
-    if not eRoot then return end
-    playTracer(myRoot.Position, eRoot.Position)
-    Library:Notify("Tracer drawn to " .. enemy.Name, 2)
-end
-
 -- ═══════════════════════════════════════════
 -- ANIMATION SPOOF
 -- ═══════════════════════════════════════════
 local function playAnimation(animId, looped, speed)
-    if PlayAnimFn then
-        pcall(function() PlayAnimFn(animId, looped, speed) end)
-        return
-    end
+    if PlayAnimFn then pcall(function() PlayAnimFn(animId, looped, speed) end); return end
     pcall(function()
-        local char = LocalPlayer.Character
-        if not char then return end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hum then return end
+        local char = LocalPlayer.Character; if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
         local animator = hum:FindFirstChildOfClass("Animator") or Instance.new("Animator", hum)
         if activeAnimTrack then pcall(function() activeAnimTrack:Stop() end); activeAnimTrack = nil end
         local anim = Instance.new("Animation")
         anim.AnimationId = "rbxassetid://" .. tostring(animId):gsub("[^%d]","")
         local track = animator:LoadAnimation(anim)
-        track.Looped = looped or false
-        track:AdjustSpeed(speed or 1)
-        track:Play()
-        activeAnimTrack = track
-        anim:Destroy()
+        track.Looped = looped or false; track:AdjustSpeed(speed or 1); track:Play()
+        activeAnimTrack = track; anim:Destroy()
     end)
 end
 
@@ -1162,8 +1261,7 @@ local function applyMobileControllerSettings()
     pcall(function()
         if Config.MobileCtrl.DisableMobilePrompts then
             for _, tag in ipairs(CollectionService:GetTagged("LobbyMobileDuelsPrompt")) do
-                local model = tag:FindFirstChild("Model")
-                if model then model.Parent = nil end
+                local model = tag:FindFirstChild("Model"); if model then model.Parent = nil end
             end
         end
     end)
@@ -1173,24 +1271,18 @@ end
 -- RELOAD SPEED
 -- ═══════════════════════════════════════════
 local reloadPatchedOriginals = {}
-
 local function applyReloadPatch()
     pcall(function()
         local ItemLibrary = require(ReplicatedStorage.Modules.ItemLibrary)
-        local Items       = rawget(ItemLibrary, "Items")
-        if not Items then return end
+        local Items       = rawget(ItemLibrary, "Items"); if not Items then return end
         for _, Item in Items do
             local Name = Item.Name
             if not table.find(Config.Weapons.Whitelist, Name) then continue end
             if not Item["ReloadLength"] then continue end
             if not reloadPatchedOriginals[Name] then reloadPatchedOriginals[Name] = Item.ReloadLength end
             if Config.Weapons.ReloadSpeedEnabled then
-                rawset(Item, "ReloadLength",
-                    Name == "Daggers" and math.max(Config.Weapons.ReloadLength, 0.09) or Config.Weapons.ReloadLength
-                )
-            else
-                rawset(Item, "ReloadLength", reloadPatchedOriginals[Name])
-            end
+                rawset(Item, "ReloadLength", Name=="Daggers" and math.max(Config.Weapons.ReloadLength, 0.09) or Config.Weapons.ReloadLength)
+            else rawset(Item, "ReloadLength", reloadPatchedOriginals[Name]) end
         end
     end)
 end
@@ -1198,29 +1290,21 @@ end
 -- ═══════════════════════════════════════════
 -- RAKNET HOOK
 -- ═══════════════════════════════════════════
-local raknetHookActive = false
-local raknetHookRef    = nil
-
+local raknetHookActive = false; local raknetHookRef = nil
 local function startRakNetHook()
     if raknetHookActive then return end
     local ok = pcall(function()
         raknetHookRef = function(packet)
-            if packet.PacketId == 0x1B then
-                local data = packet.AsBuffer
-                buffer.writeu32(data, 1, 0xFFFFFFFF)
-                packet:SetData(data)
-            end
+            if packet.PacketId == 0x1B then local data = packet.AsBuffer; buffer.writeu32(data,1,0xFFFFFFFF); packet:SetData(data) end
         end
-        raknet.add_send_hook(raknetHookRef)
-        raknetHookActive = true
+        raknet.add_send_hook(raknetHookRef); raknetHookActive = true
     end)
-    if not ok then Library:Notify("RakNet hook failed", 4); Config.RakNet.Enabled = false end
+    if not ok then Library:Notify("RakNet hook failed",4); Config.RakNet.Enabled=false end
 end
-
 local function stopRakNetHook()
     if not raknetHookActive then return end
     pcall(function() if raknetHookRef then raknet.remove_send_hook(raknetHookRef) end end)
-    raknetHookActive = false; raknetHookRef = nil
+    raknetHookActive=false; raknetHookRef=nil
 end
 
 -- ═══════════════════════════════════════════
@@ -1229,101 +1313,166 @@ end
 Connections.AutoCollect = RunService.RenderStepped:Connect(function()
     if not Config.AutoCollect.Enabled then return end
     pcall(function()
-        local character = LocalPlayer.Character
-        if not character then return end
-        local myHrp   = character:FindFirstChild("HumanoidRootPart")
-        if not myHrp then return end
-        local humanoid    = character:FindFirstChild("Humanoid")
-        local needsHealth = humanoid and humanoid.Health < humanoid.MaxHealth
+        local character = LocalPlayer.Character; if not character then return end
+        local myHrp = character:FindFirstChild("HumanoidRootPart"); if not myHrp then return end
+        local humanoid = character:FindFirstChild("Humanoid"); local needsHealth = humanoid and humanoid.Health < humanoid.MaxHealth
         for _, obj in ipairs(Workspace:GetChildren()) do
             if obj.Name == "_drop" and obj:IsA("BasePart") then
                 local wantHealth = Config.AutoCollect.CollectHealth and obj:FindFirstChild("Health") and needsHealth
                 local wantAmmo   = Config.AutoCollect.CollectAmmo   and obj:FindFirstChild("Ammo")
-                if wantHealth or wantAmmo then
-                    firetouchinterest(myHrp, obj, 0)
-                    firetouchinterest(myHrp, obj, 1)
-                end
+                if wantHealth or wantAmmo then firetouchinterest(myHrp,obj,0); firetouchinterest(myHrp,obj,1) end
             end
         end
     end)
 end)
 
 -- ═══════════════════════════════════════════
+-- MAIN RENDER LOOP (Aimbot runs here)
+-- ═══════════════════════════════════════════
+RunService.RenderStepped:Connect(function(dt)
+    camera = Workspace.CurrentCamera
+    runAimbot(dt)
+end)
+
+-- ═══════════════════════════════════════════
 -- SAFETY
 -- ═══════════════════════════════════════════
 local function disableAll()
+    Config.Aimbot.Enabled        = false
+    Config.TrackDummy.Enabled    = false
     Config.VoidSpam.Enabled      = false
     Config.PureDesync.Enabled    = false
-    Config.PulseDesync.Enabled   = false
     Config.WeaponTracker.Enabled = false
     Config.ProjectileTP.Enabled  = false
     Config.AutoCollect.Enabled   = false
     Config.ExplosionEffect.Enabled = false
     Config.TracerEffect.Enabled  = false
+    Config.SoundSpam.Enabled     = false
     disableRagebot()
-    if Config.RakNet.Enabled then stopRakNetHook(); Config.RakNet.Enabled = false end
-    stopWeaponTrackerHook()
-    stopLoopExplosions()
-    stopTracers()
-    stopAnimation()
-    stopPulseDesync()
+    if Config.RakNet.Enabled then stopRakNetHook(); Config.RakNet.Enabled=false end
+    stopWeaponTrackerHook(); stopLoopExplosions(); stopTracers(); stopAnimation()
+    stopPulseDesync(); stopSoundSpam()
+    lockedTarget = nil; lockTimer = 0; resetDelayedPos()
+    if fovCircle then fovCircle.Visible = false end
 end
 
 local function restorePosition()
-    if hrp and clientCFrame then
-        hrp.CFrame = clientCFrame
-        hrp.AssemblyLinearVelocity  = Vector3.new(0,0,0)
-        hrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
-    end
-    if pureHrp and pureClientC then
-        pureHrp.CFrame = pureClientC
-        pureHrp.AssemblyLinearVelocity  = Vector3.new(0,0,0)
-        pureHrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
-    end
-    if pulseHrp and pulseRealCF then
-        pcall(function()
-            pulseHrp.CFrame = pulseRealCF
-            pulseHrp.AssemblyLinearVelocity  = Vector3.new(0,0,0)
-            pulseHrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
-        end)
-    end
+    if hrp and clientCFrame then hrp.CFrame=clientCFrame; hrp.AssemblyLinearVelocity=Vector3.new(0,0,0); hrp.AssemblyAngularVelocity=Vector3.new(0,0,0) end
+    if pureHrp and pureClientC then pureHrp.CFrame=pureClientC; pureHrp.AssemblyLinearVelocity=Vector3.new(0,0,0); pureHrp.AssemblyAngularVelocity=Vector3.new(0,0,0) end
+    if pulseHrp and pulseRealCF then pcall(function() pulseHrp.CFrame=pulseRealCF; pulseHrp.AssemblyLinearVelocity=Vector3.new(0,0,0); pulseHrp.AssemblyAngularVelocity=Vector3.new(0,0,0) end) end
 end
 
 LocalPlayer.CharacterAdded:Connect(function(character)
     if Config.Safety.AutoDisableOnDeath then
-        -- Don't disable ragebot here — persistence handles it
-        Config.VoidSpam.Enabled      = false
-        Config.PureDesync.Enabled    = false
-        Config.PulseDesync.Enabled   = false
-        Config.WeaponTracker.Enabled = false
-        Config.ProjectileTP.Enabled  = false
-        Config.AutoCollect.Enabled   = false
-        if Config.RakNet.Enabled then stopRakNetHook(); Config.RakNet.Enabled = false end
-        stopWeaponTrackerHook()
-        stopLoopExplosions()
-        stopTracers()
-        stopPulseDesync()
-
-        hrp = nil; pureHrp = nil; pulseHrp = nil
-        wtShootingPlayers = {}; wtEnemyShooting = false; wtVoidActive = false
-
-        character:WaitForChild("HumanoidRootPart", 5)
-        task.wait(0.5)
-
-        if Config.TracerEffect.Enabled and Config.TracerEffect.OnShoot then
-            startTracerShootHook()
-        end
+        Config.Aimbot.Enabled=false; Config.TrackDummy.Enabled=false
+        Config.VoidSpam.Enabled=false; Config.PureDesync.Enabled=false
+        Config.PulseDesync.Enabled=false; Config.WeaponTracker.Enabled=false
+        Config.ProjectileTP.Enabled=false; Config.AutoCollect.Enabled=false
+        Config.SoundSpam.Enabled=false; stopSoundSpam()
+        if Config.RakNet.Enabled then stopRakNetHook(); Config.RakNet.Enabled=false end
+        stopWeaponTrackerHook(); stopLoopExplosions(); stopTracers(); stopPulseDesync()
+        hrp=nil; pureHrp=nil; pulseHrp=nil; wtShootingPlayers={}; wtEnemyShooting=false; wtVoidActive=false
+        lockedTarget=nil; lockTimer=0; resetDelayedPos()
+        character:WaitForChild("HumanoidRootPart",5); task.wait(0.5)
+        if Config.TracerEffect.Enabled and Config.TracerEffect.OnShoot then startTracerShootHook() end
     end
 end)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Config.Safety.EmergencyKey then
-        disableAll()
-        restorePosition()
+        disableAll(); restorePosition()
         Library:Notify("Emergency Stop — all features disabled", 3)
     end
 end)
+
+-- ═══════════════════════════════════════════
+-- AIMBOT TAB
+-- ═══════════════════════════════════════════
+local AB_L = Tabs.Aimbot:AddLeftGroupbox("Aimbot")
+local AB_D = Tabs.Aimbot:AddLeftGroupbox("Track Dummy")
+local AB_F = Tabs.Aimbot:AddRightGroupbox("FOV & Smoothing")
+local AB_R = Tabs.Aimbot:AddRightGroupbox("Filters")
+
+AB_L:AddLabel("CameraController: " .. (CameraController and "Connected ✓" or "Not Found ✗"))
+AB_L:AddToggle("AimbotEnabled", {
+    Text = "Enable Aimbot", Default = false,
+    Callback = function(v)
+        Config.Aimbot.Enabled = v
+        if not v then lockedTarget=nil; lockTimer=0; resetDelayedPos(); if fovCircle then fovCircle.Visible=false end end
+    end,
+})
+AB_L:AddSlider("AimbotSmooth", {Text="Smoothness",Default=10,Min=1,Max=100,Rounding=0,Callback=function(v) Config.Aimbot.Smoothness=v end})
+AB_L:AddLabel("Higher = slower / more legit")
+AB_L:AddSlider("AimbotReaction", {Text="Reaction (ms)",Default=100,Min=0,Max=500,Rounding=0,Callback=function(v) Config.Aimbot.ReactionTime=v end})
+AB_L:AddSlider("AimbotForgot",  {Text="Forgot Time (s)",Default=3,Min=1,Max=15,Rounding=0,Callback=function(v) Config.Aimbot.ForgotTime=v end})
+AB_L:AddDropdown("AimbotPart",  {Text="Target Part",Default="Head",Values=TARGET_OPTIONS,Callback=function(v) Config.Aimbot.TargetPart=v end})
+
+-- Track Dummy
+AB_D:AddLabel("Locks aimbot onto a shooting range dummy")
+AB_D:AddLabel("Index 99 = first dummy option")
+AB_D:AddLabel("Index 40 = second dummy option")
+AB_D:AddToggle("TrackDummyEnabled", {
+    Text = "Enable Track Dummy", Default = false,
+    Tooltip = "Lock aimbot onto shooting range dummy",
+    Callback = function(v)
+        Config.TrackDummy.Enabled = v
+        if v then Library:Notify("Track Dummy enabled — index " .. Config.TrackDummy.DummyIndex, 2) end
+    end,
+})
+AB_D:AddDropdown("DummyIndex", {
+    Text = "Dummy Target",
+    Default = "Index 99 (Dummy 1)",
+    Values = {"Index 99 (Dummy 1)", "Index 40 (Dummy 2)", "Custom"},
+    Callback = function(v)
+        if v == "Index 99 (Dummy 1)" then Config.TrackDummy.DummyIndex = 99
+        elseif v == "Index 40 (Dummy 2)" then Config.TrackDummy.DummyIndex = 40
+        end
+        Library:Notify("Dummy index set to " .. Config.TrackDummy.DummyIndex, 2)
+    end,
+})
+AB_D:AddSlider("DummyCustomIndex", {
+    Text    = "Custom Index",
+    Default = 99,
+    Min     = 1,
+    Max     = 200,
+    Rounding = 0,
+    Tooltip = "Only used when 'Custom' is selected above",
+    Callback = function(v)
+        Config.TrackDummy.DummyIndex = v
+    end,
+})
+AB_D:AddButton({
+    Text = "Test — Snap to Dummy Now",
+    Func = function()
+        if not CameraController then Library:Notify("CameraController not loaded",3);return end
+        local part = getDummyBestPart()
+        if not part then Library:Notify("Dummy not found — are you in shooting range?",3);return end
+        pcall(function()
+            local cp = camera.CFrame.Position
+            local du = (part.Position - cp).Unit
+            local tP = math.asin(math.clamp(du.Y,-1,1))
+            local tY = math.atan2(-du.X,-du.Z)
+            CameraController:SetRotation(Vector2.new(tP, tY))
+        end)
+        Library:Notify("Snapped to dummy at index " .. Config.TrackDummy.DummyIndex, 2)
+    end,
+})
+
+AB_F:AddSlider("AimbotFOV",    {Text="Max FOV",Default=150,Min=0,Max=600,Rounding=0,Callback=function(v) Config.Aimbot.MaxFOV=v;if fovCircle then fovCircle.Radius=v end end})
+AB_F:AddToggle("AimbotDrawFOV",{Text="Draw FOV",Default=false,Callback=function(v) Config.Aimbot.DrawFOV=v end})
+AB_F:AddDropdown("AimbotFOVStyle",{Text="FOV Style",Default="Half",Values={"Half","Filled","Invisible"},Callback=function(v) Config.Aimbot.FOVStyle=v end})
+AB_F:AddToggle("AimbotDynFOV", {Text="Dynamic FOV",Default=false,Callback=function(v) Config.Aimbot.DynamicFOV=v end})
+AB_F:AddLabel("")
+AB_F:AddLabel("Delay Position (adds tracking lag)")
+AB_F:AddLabel("0 = instant   100 = max delay")
+AB_F:AddSlider("AimbotXSmooth",    {Text="X Smooth",Default=0,Min=0,Max=100,Rounding=0,Suffix="%",Callback=function(v) Config.Aimbot.XSmooth=v/100 end})
+AB_F:AddSlider("AimbotYSmooth",    {Text="Y Smooth",Default=0,Min=0,Max=100,Rounding=0,Suffix="%",Callback=function(v) Config.Aimbot.YSmooth=v/100 end})
+AB_F:AddSlider("AimbotJumpSmooth", {Text="Jump Smooth",Default=0,Min=0,Max=100,Rounding=0,Suffix="%",Callback=function(v) Config.Aimbot.JumpSmooth=v/100 end})
+
+AB_R:AddToggle("AimbotTeam",  {Text="Team Check",Default=false,Callback=function(v) Config.Aimbot.TeamCheck=v end})
+AB_R:AddToggle("AimbotVis",   {Text="Visible Check",Default=false,Callback=function(v) Config.Aimbot.VisibleCheck=v end})
+AB_R:AddButton({Text="Reset Lock",Func=function() lockedTarget=nil;lockTimer=0;resetDelayedPos();Library:Notify("Aimbot lock reset",2) end})
 
 -- ═══════════════════════════════════════════
 -- VOID SPAM TAB
@@ -1339,35 +1488,15 @@ VS_L:AddDropdown("VoidMethod",{Text="Method",Default="Extreme Desync",Values={"E
 VS_L:AddSlider("VoidAltitude",{Text="Altitude",Default=100000,Min=1000,Max=500000,Rounding=0,Callback=function(v)Config.VoidSpam.Altitude=v end})
 VS_L:AddSlider("VoidIntensity",{Text="Intensity %",Default=100,Min=10,Max=100,Rounding=0,Callback=function(v)Config.VoidSpam.Intensity=v end})
 
-VS_PD:AddLabel("Max-range desync, no intensity scaling")
-VS_PD:AddToggle("PureDesyncEnabled",{Text="Enable Pure Desync",Default=false,Callback=function(v)Config.PureDesync.Enabled=v;if v then Library:Notify("Pure Desync enabled",2)end end})
+VS_PD:AddLabel("Max-range desync — no intensity scaling")
+VS_PD:AddToggle("PureDesyncEnabled",{Text="Enable Pure Desync",Default=false,Callback=function(v)Config.PureDesync.Enabled=v;if v then Library:Notify("Pure Desync enabled",2) end end})
 
-VS_PU:AddLabel("Alternates: void → real → void → real")
-VS_PU:AddLabel("Hide phase: server thinks you're gone")
-VS_PU:AddLabel("Attack phase: fire projectiles freely")
-VS_PU:AddLabel("Works best WITH Projectile TP tab")
-VS_PU:AddToggle("PulseDesyncEnabled",{
-    Text="Enable Pulse Desync",Default=false,
-    Callback=function(v)
-        Config.PulseDesync.Enabled=v
-        if v then startPulseDesync();Library:Notify("Pulse Desync enabled — hide/attack cycling",3)
-        else stopPulseDesync() end
-    end,
-})
-VS_PU:AddSlider("PulseHideTime",{
-    Text="Hide Time (ms)",Default=250,Min=50,Max=2000,Rounding=0,
-    Tooltip="How long to stay at void altitude per cycle",
-    Callback=function(v)Config.PulseDesync.HideTime=v/1000 end,
-})
-VS_PU:AddSlider("PulseAttackTime",{
-    Text="Attack Time (ms)",Default=100,Min=10,Max=1000,Rounding=0,
-    Tooltip="How long to stay at real position per cycle (shoot here)",
-    Callback=function(v)Config.PulseDesync.AttackTime=v/1000 end,
-})
-VS_PU:AddSlider("PulseAltitude",{
-    Text="Void Altitude",Default=150000,Min=10000,Max=500000,Rounding=0,
-    Callback=function(v)Config.PulseDesync.VoidAltitude=v end,
-})
+VS_PU:AddLabel("Alternates void → real → void on timer")
+VS_PU:AddLabel("Best used WITH Projectile TP")
+VS_PU:AddToggle("PulseDesyncEnabled",{Text="Enable Pulse Desync",Default=false,Callback=function(v)Config.PulseDesync.Enabled=v;if v then startPulseDesync() else stopPulseDesync() end end})
+VS_PU:AddSlider("PulseHideTime",{Text="Hide Time (ms)",Default=250,Min=50,Max=2000,Rounding=0,Callback=function(v)Config.PulseDesync.HideTime=v/1000 end})
+VS_PU:AddSlider("PulseAttackTime",{Text="Attack Time (ms)",Default=100,Min=10,Max=1000,Rounding=0,Callback=function(v)Config.PulseDesync.AttackTime=v/1000 end})
+VS_PU:AddSlider("PulseAltitude",{Text="Void Altitude",Default=150000,Min=10000,Max=500000,Rounding=0,Callback=function(v)Config.PulseDesync.VoidAltitude=v end})
 
 VS_WT:AddLabel("Enemy fires → boost void to 200k")
 VS_WT:AddLabel("Enemy stops → TP into them")
@@ -1377,20 +1506,16 @@ VS_WT:AddSlider("WTTeleportDelay",{Text="Teleport Delay (ms)",Default=100,Min=0,
 VS_WT:AddToggle("WTTeamCheck",{Text="Team Check",Default=true,Callback=function(v)Config.WeaponTracker.TeamCheck=v end})
 
 VS_R:AddLabel("SERVER: Random extreme positions")
-VS_R:AddLabel("CLIENT: Normal position, can still move")
+VS_R:AddLabel("CLIENT: Normal position")
+VS_R:AddLabel("Heartbeat  → Fake pos sent")
+VS_R:AddLabel("RenderStep → Real pos restored")
 VS_R:AddLabel("")
-VS_R:AddLabel("Pulse Desync:")
-VS_R:AddLabel("Hide → void → server loses you")
-VS_R:AddLabel("Attack → real → shoot safely")
-VS_R:AddLabel("")
-VS_R:AddLabel("Best combo:")
-VS_R:AddLabel("Pulse Desync + Projectile TP")
-VS_R:AddLabel("Fires only during attack window")
+VS_R:AddLabel("Pulse Desync + Projectile TP:")
+VS_R:AddLabel("Hide = server loses you")
+VS_R:AddLabel("Attack = shoot safely")
 
 -- ═══════════════════════════════════════════
--- PROJECTILE TP TAB (IMPROVED)
--- Added: Priority, TeamCheck, VisCheck,
---        MaxDistance, HitboxSize, ShootAttempts
+-- PROJECTILE TP TAB
 -- ═══════════════════════════════════════════
 local PT_L = Tabs.ProjectileTP:AddLeftGroupbox("Projectile Teleport")
 local PT_M = Tabs.ProjectileTP:AddLeftGroupbox("Targeting")
@@ -1399,161 +1524,47 @@ local PT_I = Tabs.ProjectileTP:AddRightGroupbox("How It Works")
 
 PT_L:AddToggle("ProjectileEnabled",{Text="Enable Projectile TP",Default=false,Callback=function(v)Config.ProjectileTP.Enabled=v end})
 PT_L:AddToggle("ProjectileAutoShoot",{Text="Auto Shoot",Default=false,Callback=function(v)Config.ProjectileTP.AutoShoot=v end})
-PT_L:AddDropdown("ProjectileHitbox",{
-    Text="Target Hitbox",Default="HitBoxHeadSmall",
-    Values={"HitBoxHeadSmall","HitBoxHead","Head","HumanoidRootPart"},
-    Callback=function(v)Config.ProjectileTP.TargetPart=v end,
-})
-PT_L:AddSlider("ProjectileDelay",{
-    Text="Loop Delay (ms)",Default=10,Min=1,Max=100,Rounding=0,
-    Callback=function(v)Config.ProjectileTP.LoopDelay=v/1000 end,
-})
+PT_L:AddDropdown("ProjectileHitbox",{Text="Target Hitbox",Default="HitBoxHeadSmall",Values={"HitBoxHeadSmall","HitBoxHead","Head","HumanoidRootPart"},Callback=function(v)Config.ProjectileTP.TargetPart=v end})
+PT_L:AddSlider("ProjectileDelay",{Text="Loop Delay (ms)",Default=10,Min=1,Max=100,Rounding=0,Callback=function(v)Config.ProjectileTP.LoopDelay=v/1000 end})
 PT_L:AddToggle("ProjectileCache",{Text="Cache Projectiles",Default=true,Callback=function(v)Config.ProjectileTP.Cache=v end})
+PT_L:AddSlider("ShootAttempts",{Text="Shoot Attempts",Default=1,Min=1,Max=10,Rounding=0,Callback=function(v)Config.ProjectileTP.ShootAttempts=v end})
+PT_L:AddSlider("HitboxSize",{Text="Hitbox Size (studs)",Default=5,Min=1,Max=50,Rounding=0,Callback=function(v)Config.ProjectileTP.HitboxSize=v end})
 
--- Shoot Attempts (from image)
-PT_L:AddSlider("ShootAttempts",{
-    Text="Shoot Attempts",Default=1,Min=1,Max=10,Rounding=0,
-    Tooltip="How many times to firetouchinterest per projectile per target",
-    Callback=function(v)Config.ProjectileTP.ShootAttempts=v end,
-})
-PT_L:AddSlider("HitboxSize",{
-    Text="Hitbox Size (studs)",Default=5,Min=1,Max=50,Rounding=0,
-    Tooltip="Larger = easier to hit, creates expanded hitbox part",
-    Callback=function(v)Config.ProjectileTP.HitboxSize=v end,
-})
+PT_M:AddDropdown("ProjectilePriority",{Text="Target Priority",Default="Closest",Values={"Closest","Furthest","Random","Lowest HP","Highest HP"},Callback=function(v)Config.ProjectileTP.Priority=v end})
 
--- Targeting (from image: priority dropdown)
-PT_M:AddLabel("Priority controls which enemy is targeted first")
-PT_M:AddDropdown("ProjectilePriority",{
-    Text="Target Priority",Default="Closest",
-    Values={"Closest","Furthest","Random","Lowest HP","Highest HP"},
-    Tooltip="How to sort the enemy target list",
-    Callback=function(v)Config.ProjectileTP.Priority=v end,
-})
+PT_R:AddToggle("ProjTeamCheck",{Text="Team Check",Default=true,Callback=function(v)Config.ProjectileTP.TeamCheck=v end})
+PT_R:AddToggle("ProjVisCheck",{Text="Visible Check",Default=false,Callback=function(v)Config.ProjectileTP.VisCheck=v end})
+PT_R:AddSlider("ProjMaxDist",{Text="Max Distance",Default=999,Min=10,Max=999,Rounding=0,Callback=function(v)Config.ProjectileTP.MaxDistance=v end})
+PT_R:AddLabel(""); PT_R:AddLabel("Projectile TP only fires during"); PT_R:AddLabel("Pulse Desync attack window")
 
--- Filters (from image: team check, vis check, max distance)
-PT_R:AddToggle("ProjTeamCheck",{
-    Text="Team Check",Default=true,
-    Tooltip="Skip teammates",
-    Callback=function(v)Config.ProjectileTP.TeamCheck=v end,
-})
-PT_R:AddToggle("ProjVisCheck",{
-    Text="Visible Check",Default=false,
-    Tooltip="Only hit enemies you have line of sight to",
-    Callback=function(v)Config.ProjectileTP.VisCheck=v end,
-})
-PT_R:AddSlider("ProjMaxDist",{
-    Text="Max Distance",Default=999,Min=10,Max=999,Rounding=0,
-    Callback=function(v)Config.ProjectileTP.MaxDistance=v end,
-})
-
-PT_R:AddLabel("")
-PT_R:AddLabel("Pulse Desync sync:")
-PT_R:AddLabel("Projectile TP only fires during")
-PT_R:AddLabel("Pulse Desync attack window")
-PT_R:AddLabel("Enable both for best results")
-
-PT_I:AddLabel("1. You shoot → CoreProjectile")
-PT_I:AddLabel("2. firetouchinterest → enemy hitbox")
+PT_I:AddLabel("1. Shoot → CoreProjectile created")
+PT_I:AddLabel("2. firetouchinterest on hitbox")
 PT_I:AddLabel("3. Shoot Attempts × per target")
-PT_I:AddLabel("")
-PT_I:AddLabel("Pulse Desync + Projectile TP:")
-PT_I:AddLabel("Server sees you at void altitude")
-PT_I:AddLabel("→ can't shoot you back")
-PT_I:AddLabel("Attack window = you shoot them")
-PT_I:AddLabel("→ instant hit, no retaliation")
+PT_I:AddLabel("Pulse + Proj TP = safest combo")
 
 -- ═══════════════════════════════════════════
--- RAGEBOT TAB (IMPROVED)
+-- RAGEBOT TAB
 -- ═══════════════════════════════════════════
 local RB_L = Tabs.Ragebot:AddLeftGroupbox("Ragebot")
 local RB_T = Tabs.Ragebot:AddLeftGroupbox("Timing (Hide / Attack)")
 local RB_R = Tabs.Ragebot:AddRightGroupbox("Priority & Persistence")
 
-RB_L:AddToggle("RagebotEnabled",{
-    Text="Enabled",Default=false,
-    Callback=function(v)
-        if v then enableRagebot() else disableRagebot() end
-    end,
-})
-RB_L:AddToggle("RagebotVoidSpam",{
-    Text="Void Spam Sync",Default=true,
-    Tooltip="Sync hide/attack timing with Pulse Desync",
-    Callback=function(v)Config.Ragebot.VoidSpamSync=v end,
-})
-RB_L:AddToggle("RagebotClientTP",{
-    Text="Client-Side Enemy TP",Default=true,
-    Tooltip="Pulls enemy to your position visually",
-    Callback=function(v)Config.Ragebot.ClientTP=v end,
-})
+RB_L:AddToggle("RagebotEnabled",{Text="Enabled",Default=false,Callback=function(v) if v then enableRagebot() else disableRagebot() end end})
+RB_L:AddToggle("RagebotVoidSpam",{Text="Void Spam Sync",Default=true,Callback=function(v)Config.Ragebot.VoidSpamSync=v end})
+RB_L:AddToggle("RagebotClientTP",{Text="Client-Side Enemy TP",Default=true,Callback=function(v)Config.Ragebot.ClientTP=v end})
 RB_L:AddSlider("RagebotOrbitRadius",{Text="Orbit Radius",Default=5,Min=1,Max=50,Rounding=0,Callback=function(v)Config.Ragebot.OrbitRadius=v end})
 RB_L:AddSlider("RagebotOrbitSpeed",{Text="Orbit Speed",Default=10,Min=1,Max=50,Rounding=0,Callback=function(v)Config.Ragebot.OrbitSpeed=v end})
 
--- Hide / Attack timing (from image)
-RB_T:AddLabel("Matches the image: hide:0.25s attack:0.1s")
-RB_T:AddLabel("During hide: orbit at void altitude")
-RB_T:AddLabel("During attack: Projectile TP fires")
-RB_T:AddSlider("RagebotHideTime",{
-    Text="Hide Time (ms)",Default=250,Min=50,Max=2000,Rounding=0,
-    Callback=function(v)
-        Config.Ragebot.HideTime=v/1000
-        -- Keep in sync with Pulse Desync if using sync
-        if Config.Ragebot.VoidSpamSync then Config.PulseDesync.HideTime=v/1000 end
-    end,
-})
-RB_T:AddSlider("RagebotAttackTime",{
-    Text="Attack Time (ms)",Default=100,Min=10,Max=1000,Rounding=0,
-    Callback=function(v)
-        Config.Ragebot.AttackTime=v/1000
-        if Config.Ragebot.VoidSpamSync then Config.PulseDesync.AttackTime=v/1000 end
-    end,
-})
-RB_T:AddSlider("RagebotShootAttempts",{
-    Text="Shoot Attempts",Default=1,Min=1,Max=10,Rounding=0,
-    Tooltip="Passed through to Projectile TP during attack phase",
-    Callback=function(v)
-        Config.Ragebot.ShootAttempts=v
-        -- Sync with Projectile TP shoot attempts
-        Config.ProjectileTP.ShootAttempts=v
-    end,
-})
+RB_T:AddLabel("hide: 0.25s | attack: 0.1s (defaults)")
+RB_T:AddSlider("RagebotHideTime",{Text="Hide Time (ms)",Default=250,Min=50,Max=2000,Rounding=0,Callback=function(v)Config.Ragebot.HideTime=v/1000;if Config.Ragebot.VoidSpamSync then Config.PulseDesync.HideTime=v/1000 end end})
+RB_T:AddSlider("RagebotAttackTime",{Text="Attack Time (ms)",Default=100,Min=10,Max=1000,Rounding=0,Callback=function(v)Config.Ragebot.AttackTime=v/1000;if Config.Ragebot.VoidSpamSync then Config.PulseDesync.AttackTime=v/1000 end end})
+RB_T:AddSlider("RagebotShootAttempts",{Text="Shoot Attempts",Default=1,Min=1,Max=10,Rounding=0,Callback=function(v)Config.Ragebot.ShootAttempts=v;Config.ProjectileTP.ShootAttempts=v end})
 
--- Persistence settings
-RB_R:AddLabel("Persist fixes: ragebot auto-resumes")
-RB_R:AddLabel("after round ends / character resets")
-RB_R:AddLabel("No need to re-enable every round")
-RB_R:AddToggle("RagebotPersist",{
-    Text="Persist Across Rounds",Default=true,
-    Tooltip="Auto re-enable ragebot after each round",
-    Callback=function(v)Config.Ragebot.PersistAcrossRounds=v end,
-})
-RB_R:AddLabel("")
-RB_R:AddLabel("Target Priority (shared with Projectile TP)")
-RB_R:AddDropdown("RagebotPriority",{
-    Text="Priority",Default="Closest",
-    Values={"Closest","Furthest","Random","Lowest HP","Highest HP"},
-    Callback=function(v)
-        Config.ProjectileTP.Priority=v
-    end,
-})
-RB_R:AddButton({
-    Text="Force Resume Ragebot",
-    Func=function()
-        if not Config.Ragebot.Enabled then
-            enableRagebot()
-            Library:Notify("Ragebot force-resumed",2)
-        else
-            Library:Notify("Ragebot already running",2)
-        end
-    end,
-})
-RB_R:AddButton({
-    Text="Force Stop Ragebot",
-    Func=function()
-        disableRagebot()
-        Library:Notify("Ragebot stopped",2)
-    end,
-})
+RB_R:AddLabel("Persist = auto-resume after each round")
+RB_R:AddToggle("RagebotPersist",{Text="Persist Across Rounds",Default=true,Callback=function(v)Config.Ragebot.PersistAcrossRounds=v end})
+RB_R:AddDropdown("RagebotPriority",{Text="Priority",Default="Closest",Values={"Closest","Furthest","Random","Lowest HP","Highest HP"},Callback=function(v)Config.ProjectileTP.Priority=v end})
+RB_R:AddButton({Text="Force Resume Ragebot",Func=function() if not Config.Ragebot.Enabled then enableRagebot();Library:Notify("Ragebot force-resumed",2) else Library:Notify("Already running",2) end end})
+RB_R:AddButton({Text="Force Stop Ragebot",Func=function() disableRagebot();Library:Notify("Ragebot stopped",2) end})
 
 -- ═══════════════════════════════════════════
 -- WEAPONS TAB
@@ -1575,42 +1586,110 @@ WP_R:AddLabel("0s = instant reload")
 -- EFFECTS TAB
 -- ═══════════════════════════════════════════
 local EF_L  = Tabs.Effects:AddLeftGroupbox("Explosion Effects")
+local EF_SS = Tabs.Effects:AddLeftGroupbox("Sound Spam")
 local EF_R  = Tabs.Effects:AddRightGroupbox("Tracer Effects")
-local EF_A  = Tabs.Effects:AddLeftGroupbox("Animation Spoof")
+local EF_A  = Tabs.Effects:AddRightGroupbox("Animation Spoof")
 local EF_MC = Tabs.Effects:AddRightGroupbox("Mobile Controller")
 
-EF_L:AddLabel("Status: " .. (ExplosionEffectFn and "Loaded ✓" or "Not Found ✗"))
-EF_L:AddToggle("ExplosionEnabled",{Text="Enable Explosion Effects",Default=false,Callback=function(v)Config.ExplosionEffect.Enabled=v;if not v then stopLoopExplosions() end end})
-EF_L:AddToggle("ExplosionOnDeath",{Text="Explode on Enemy Death",Default=true,Callback=function(v)Config.ExplosionEffect.OnDeath=v end})
-EF_L:AddToggle("ExplosionOnKill",{Text="Explode on Kill",Default=true,Callback=function(v)Config.ExplosionEffect.OnKill=v end})
-EF_L:AddToggle("ExplosionOnHit",{Text="Explode on Hit",Default=false,Callback=function(v)Config.ExplosionEffect.OnHit=v end})
-EF_L:AddSlider("ExplosionSize",{Text="Explosion Size",Default=24,Min=4,Max=100,Rounding=0,Callback=function(v)Config.ExplosionEffect.Size=v end})
+-- Explosion
+EF_L:AddLabel("ExplosionEffect: " .. (ExplosionEffectFn and "✓" or "✗"))
+EF_L:AddToggle("ExplosionEnabled",{Text="Enable",Default=false,Callback=function(v)Config.ExplosionEffect.Enabled=v;if not v then stopLoopExplosions() end end})
+EF_L:AddToggle("ExplosionOnDeath",{Text="On Enemy Death",Default=true,Callback=function(v)Config.ExplosionEffect.OnDeath=v end})
+EF_L:AddToggle("ExplosionOnKill", {Text="On Kill",Default=true,Callback=function(v)Config.ExplosionEffect.OnKill=v end})
+EF_L:AddToggle("ExplosionOnHit",  {Text="On Hit",Default=false,Callback=function(v)Config.ExplosionEffect.OnHit=v end})
+EF_L:AddSlider("ExplosionSize",   {Text="Size",Default=24,Min=4,Max=100,Rounding=0,Callback=function(v)Config.ExplosionEffect.Size=v end})
 EF_L:AddSlider("ExplosionVariance",{Text="Sound Variance %",Default=20,Min=0,Max=100,Rounding=0,Callback=function(v)Config.ExplosionEffect.SpeedVariance=v/100 end})
-EF_L:AddToggle("ExplosionLoop",{Text="Loop Explosions Around Self",Default=false,Callback=function(v)Config.ExplosionEffect.LoopExplosions=v;if v and Config.ExplosionEffect.Enabled then startLoopExplosions() else stopLoopExplosions() end end})
-EF_L:AddSlider("ExplosionLoopInterval",{Text="Loop Interval",Default=50,Min=10,Max=200,Rounding=0,Suffix="/100s",Callback=function(v)Config.ExplosionEffect.LoopInterval=v/100 end})
-EF_L:AddButton({Text="Explode at My Position",Func=function()if not ExplosionEffectFn then Library:Notify("Module not loaded",3);return end;explodeAtSelf();Library:Notify("Explosion triggered",2)end})
-EF_L:AddButton({Text="Explode at Closest Enemy",Func=function()if not ExplosionEffectFn then Library:Notify("Module not loaded",3);return end;explodeAtEnemy();Library:Notify("Explosion triggered",2)end})
+EF_L:AddToggle("ExplosionLoop",   {Text="Loop Around Self",Default=false,Callback=function(v)Config.ExplosionEffect.LoopExplosions=v;if v and Config.ExplosionEffect.Enabled then startLoopExplosions() else stopLoopExplosions() end end})
+EF_L:AddButton({Text="Explode at My Position",Func=function()if not ExplosionEffectFn then Library:Notify("Module not found",3);return end;local char=LocalPlayer.Character;if char then local root=char:FindFirstChild("HumanoidRootPart");if root then triggerExplosion(root.Position,Config.ExplosionEffect.Size) end end;Library:Notify("Explosion triggered",2)end})
+EF_L:AddButton({Text="Explode at Closest Enemy",Func=function()if not ExplosionEffectFn then Library:Notify("Module not found",3);return end;local enemy=GetClosestEnemy();if enemy and enemy.Character then local root=enemy.Character:FindFirstChild("HumanoidRootPart");if root then triggerExplosion(root.Position,Config.ExplosionEffect.Size);Library:Notify("Explosion at "..enemy.Name,2) end else Library:Notify("No enemy found",2) end end})
 
-EF_R:AddLabel("Status: " .. (TracerEffectModule and "Loaded ✓" or "Not Found ✗"))
-EF_R:AddToggle("TracerEnabled",{Text="Enable Tracer Effects",Default=false,Callback=function(v)Config.TracerEffect.Enabled=v;if v then startTracerShootHook() else stopTracers() end end})
-EF_R:AddToggle("TracerOnShoot",{Text="Tracer on Shoot",Default=true,Callback=function(v)Config.TracerEffect.OnShoot=v end})
+-- Sound Spam
+EF_SS:AddLabel("Sound IDs from Gun module + AR viewmodel")
+EF_SS:AddLabel("Plays sound repeatedly at your position")
+EF_SS:AddToggle("SoundSpamEnabled", {
+    Text = "Enable Sound Spam", Default = false,
+    Callback = function(v)
+        Config.SoundSpam.Enabled = v
+        if v then startSoundSpam(); Library:Notify("Sound Spam enabled",2)
+        else stopSoundSpam() end
+    end,
+})
+EF_SS:AddDropdown("SoundSpamPreset", {
+    Text    = "Preset Sound",
+    Default = "Explosion / Impact",
+    Values  = SOUND_ID_KEYS,
+    Tooltip = "Select from sounds extracted from game modules",
+    Callback = function(v)
+        Config.SoundSpam.SoundId = SOUND_ID_VALUES[v]
+        Library:Notify("Sound set to: " .. v, 2)
+    end,
+})
+EF_SS:AddInput("SoundSpamCustomId", {
+    Default     = "",
+    Numeric     = false,
+    Finished    = false,
+    Text        = "Custom Sound ID",
+    Placeholder = "rbxassetid://... or just the number",
+    Tooltip     = "Overrides preset if not empty",
+    Callback    = function(v)
+        -- Normalise to rbxassetid:// format
+        if v ~= "" then
+            local numOnly = v:gsub("[^%d]","")
+            Config.SoundSpam.CustomId = numOnly ~= "" and ("rbxassetid://" .. numOnly) or ""
+        else
+            Config.SoundSpam.CustomId = ""
+        end
+    end,
+})
+EF_SS:AddSlider("SoundSpamInterval", {
+    Text     = "Interval (ms)",
+    Default  = 100,
+    Min      = 10,
+    Max      = 2000,
+    Rounding = 0,
+    Callback = function(v) Config.SoundSpam.Interval = v / 1000 end,
+})
+EF_SS:AddSlider("SoundSpamVolume", {
+    Text     = "Volume",
+    Default  = 10,
+    Min      = 1,
+    Max      = 10,
+    Rounding = 0,
+    Suffix   = "x",
+    Callback = function(v) Config.SoundSpam.Volume = v end,
+})
+EF_SS:AddButton({
+    Text = "Play Once Now",
+    Func = function()
+        local id = (Config.SoundSpam.CustomId ~= "" and Config.SoundSpam.CustomId) or Config.SoundSpam.SoundId
+        playSoundOnce(id, Config.SoundSpam.Volume)
+        Library:Notify("Sound played: " .. id, 2)
+    end,
+})
+
+-- Tracer
+EF_R:AddLabel("TracerEffect: " .. (TracerEffectModule and "✓" or "✗"))
+EF_R:AddToggle("TracerEnabled",{Text="Enable Tracers",Default=false,Callback=function(v)Config.TracerEffect.Enabled=v;if v then startTracerShootHook() else stopTracers() end end})
+EF_R:AddToggle("TracerOnShoot",{Text="On Shoot",Default=true,Callback=function(v)Config.TracerEffect.OnShoot=v end})
 EF_R:AddToggle("TracerToEnemy",{Text="Trace to Closest Enemy",Default=false,Callback=function(v)Config.TracerEffect.TraceToEnemy=v end})
 EF_R:AddLabel("Color"):AddColorPicker("TracerColor",{Default=Color3.fromRGB(255,50,50),Callback=function(v)Config.TracerEffect.Color=v end})
-EF_R:AddSlider("TracerWidth",{Text="Tracer Width",Default=5,Min=1,Max=50,Rounding=0,Suffix="/100",Callback=function(v)Config.TracerEffect.Width=v/100 end})
-EF_R:AddSlider("TracerDuration",{Text="Tracer Duration (ms)",Default=300,Min=50,Max=2000,Rounding=0,Callback=function(v)Config.TracerEffect.Duration=v/1000 end})
-EF_R:AddButton({Text="Draw Tracer to Closest Enemy",Func=function()if not TracerEffectModule then Library:Notify("Module not loaded",3);return end;drawManualTracer()end})
+EF_R:AddSlider("TracerWidth",{Text="Width",Default=5,Min=1,Max=50,Rounding=0,Suffix="/100",Callback=function(v)Config.TracerEffect.Width=v/100 end})
+EF_R:AddSlider("TracerDuration",{Text="Duration (ms)",Default=300,Min=50,Max=2000,Rounding=0,Callback=function(v)Config.TracerEffect.Duration=v/1000 end})
+EF_R:AddButton({Text="Draw Tracer to Enemy Now",Func=function()if not TracerEffectModule then Library:Notify("Module not loaded",3);return end;local myChar=LocalPlayer.Character;local myRoot=myChar and myChar:FindFirstChild("HumanoidRootPart");local enemy=GetClosestEnemy();if enemy and enemy.Character and myRoot then local eRoot=enemy.Character:FindFirstChild("HumanoidRootPart");if eRoot then playTracer(myRoot.Position,eRoot.Position);Library:Notify("Tracer to "..enemy.Name,2) end else Library:Notify("No enemy found",2) end end})
 
+-- Animation Spoof
 EF_A:AddLabel("PlayPreloadedAnimation: " .. (PlayAnimFn and "✓" or "Fallback"))
 EF_A:AddInput("AnimID",{Default="",Numeric=true,Finished=false,Text="Animation ID",Placeholder="e.g. 507770239",Callback=function(v)Config.AnimationSpoof.AnimId=v end})
 EF_A:AddToggle("AnimLooped",{Text="Looped",Default=false,Callback=function(v)Config.AnimationSpoof.Looped=v end})
-EF_A:AddSlider("AnimSpeed",{Text="Playback Speed",Default=10,Min=1,Max=50,Rounding=0,Suffix="/10",Callback=function(v)Config.AnimationSpoof.Speed=v/10 end})
-EF_A:AddButton({Text="Play Animation",Func=function()local id=Config.AnimationSpoof.AnimId;if not id or id=="" then Library:Notify("Enter an animation ID first",2);return end;playAnimation(id,Config.AnimationSpoof.Looped,Config.AnimationSpoof.Speed);Library:Notify("Playing animation "..id,2)end})
+EF_A:AddSlider("AnimSpeed",{Text="Speed",Default=10,Min=1,Max=50,Rounding=0,Suffix="/10",Callback=function(v)Config.AnimationSpoof.Speed=v/10 end})
+EF_A:AddButton({Text="Play Animation",Func=function()local id=Config.AnimationSpoof.AnimId;if not id or id=="" then Library:Notify("Enter an animation ID",2);return end;playAnimation(id,Config.AnimationSpoof.Looped,Config.AnimationSpoof.Speed);Library:Notify("Playing "..id,2)end})
 EF_A:AddButton({Text="Stop Animation",Func=function()stopAnimation();Library:Notify("Animation stopped",2)end})
 
+-- Mobile
 EF_MC:AddLabel("MobileController: " .. (MobileController and "✓" or "✗"))
-EF_MC:AddToggle("ForceEnableMobile",{Text="Force Enable Mobile Mode",Default=false,Callback=function(v)Config.MobileCtrl.ForceEnableMobile=v;applyMobileControllerSettings() end})
-EF_MC:AddToggle("DisableMobilePrompts",{Text="Hide Mobile Duel Prompts",Default=false,Callback=function(v)Config.MobileCtrl.DisableMobilePrompts=v;applyMobileControllerSettings() end})
-EF_MC:AddButton({Text="Apply Mobile Settings Now",Func=function()applyMobileControllerSettings();Library:Notify("Mobile settings applied",2)end})
+EF_MC:AddToggle("ForceEnableMobile",{Text="Force Mobile Mode",Default=false,Callback=function(v)Config.MobileCtrl.ForceEnableMobile=v;applyMobileControllerSettings() end})
+EF_MC:AddToggle("DisableMobilePrompts",{Text="Hide Duel Prompts",Default=false,Callback=function(v)Config.MobileCtrl.DisableMobilePrompts=v;applyMobileControllerSettings() end})
+EF_MC:AddButton({Text="Apply Now",Func=function()applyMobileControllerSettings();Library:Notify("Applied",2)end})
 
 -- ═══════════════════════════════════════════
 -- MISC TAB
@@ -1620,19 +1699,19 @@ local MS_R  = Tabs.Misc:AddRightGroupbox("Auto Collect")
 local MS_OB = Tabs.Misc:AddLeftGroupbox("Anti Out Of Bounds")
 
 MS_L:AddLabel("Spoofs packet 0x1B ping to 0xFFFFFFFF")
-MS_L:AddToggle("RakNetEnabled",{Text="Enable RakNet Ping Spoof",Default=false,Callback=function(v)Config.RakNet.Enabled=v;if v then startRakNetHook() else stopRakNetHook() end end})
-MS_L:AddButton({Text="Remove Hook Now",Func=function()stopRakNetHook();Config.RakNet.Enabled=false;Library:Notify("Hook removed",2)end})
+MS_L:AddToggle("RakNetEnabled",{Text="Enable",Default=false,Callback=function(v)Config.RakNet.Enabled=v;if v then startRakNetHook() else stopRakNetHook() end end})
+MS_L:AddButton({Text="Remove Hook",Func=function()stopRakNetHook();Config.RakNet.Enabled=false;Library:Notify("Hook removed",2)end})
 
 MS_R:AddToggle("AutoCollectEnabled",{Text="Enable Auto Collect",Default=false,Callback=function(v)Config.AutoCollect.Enabled=v end})
-MS_R:AddToggle("CollectHealth",{Text="Collect Health Drops",Default=true,Tooltip="Only when HP not full",Callback=function(v)Config.AutoCollect.CollectHealth=v end})
-MS_R:AddToggle("CollectAmmo",{Text="Collect Ammo Drops",Default=true,Callback=function(v)Config.AutoCollect.CollectAmmo=v end})
+MS_R:AddToggle("CollectHealth",{Text="Health Drops",Default=true,Tooltip="Only when HP not full",Callback=function(v)Config.AutoCollect.CollectHealth=v end})
+MS_R:AddToggle("CollectAmmo",{Text="Ammo Drops",Default=true,Callback=function(v)Config.AutoCollect.CollectAmmo=v end})
 
 MS_OB:AddLabel("3 layers: Remote spoof, Module patch, Hide")
 MS_OB:AddToggle("AntiOOBEnabled",{Text="Enable Anti OOB",Default=false,Callback=function(v)Config.AntiOOB.Enabled=v;if v then startAntiOOB() else stopAntiOOB() end end})
-MS_OB:AddToggle("AntiOOBSpoofRemote",{Text="Spoof OOB Remote",Default=true,Callback=function(v)Config.AntiOOB.SpoofRemote=v end})
-MS_OB:AddToggle("AntiOOBPatchModule",{Text="Patch OOB Module",Default=true,Callback=function(v)Config.AntiOOB.PatchModule=v;if v and Config.AntiOOB.Enabled then antiOOB_PatchModule() end end})
-MS_OB:AddToggle("AntiOOBHideParts",{Text="Hide OOB Zone Parts",Default=false,Callback=function(v)Config.AntiOOB.HideOOBParts=v;if v and Config.AntiOOB.Enabled then antiOOB_HideOOBParts(true) end end})
-MS_OB:AddButton({Text="Force Apply Anti OOB Now",Func=function()startAntiOOB();Library:Notify("Anti OOB force-applied",2)end})
+MS_OB:AddToggle("AntiOOBSpoofRemote",{Text="Spoof Remote",Default=true,Callback=function(v)Config.AntiOOB.SpoofRemote=v end})
+MS_OB:AddToggle("AntiOOBPatchModule",{Text="Patch Module",Default=true,Callback=function(v)Config.AntiOOB.PatchModule=v;if v and Config.AntiOOB.Enabled then antiOOB_PatchModule() end end})
+MS_OB:AddToggle("AntiOOBHideParts",{Text="Hide OOB Parts",Default=false,Callback=function(v)Config.AntiOOB.HideOOBParts=v;if v and Config.AntiOOB.Enabled then antiOOB_HideOOBParts(true) end end})
+MS_OB:AddButton({Text="Force Apply Now",Func=function()startAntiOOB();Library:Notify("Anti OOB applied",2)end})
 
 -- ═══════════════════════════════════════════
 -- SETTINGS TAB
@@ -1643,14 +1722,10 @@ local ST_R = Tabs.Settings:AddRightGroupbox("Stop All")
 ST_L:AddToggle("AutoDisable",{Text="Auto Disable on Death",Default=true,Callback=function(v)Config.Safety.AutoDisableOnDeath=v end})
 ST_L:AddLabel("Emergency Stop Key:  DELETE")
 ST_L:AddLabel("Restores position + disables everything")
-ST_L:AddLabel("(Ragebot persist still re-enables after death)")
 
+ST_R:AddButton({Text="Disable All Features",Func=function()disableAll();restorePosition();Library:Notify("All features disabled",2)end})
 ST_R:AddButton({
-    Text="Disable All Features",
-    Func=function()disableAll();restorePosition();Library:Notify("All features disabled",2)end,
-})
-ST_R:AddButton({
-    Text="Unload Script",
+    Text="Unload Script",DoubleClick=true,Tooltip="Double-click to unload",
     Func=function()
         for _,conn in pairs(Connections) do if typeof(conn)=="RBXScriptConnection" then conn:Disconnect() end end
         for _,conn in ipairs(antiOOBConnections) do pcall(function()conn:Disconnect()end) end
@@ -1661,13 +1736,11 @@ ST_R:AddButton({
         pcall(function()RunService:UnbindFromRenderStep("PureDesyncRestore")end)
         stopRakNetHook(); stopWeaponTrackerHook(); stopAntiOOB()
         stopLoopExplosions(); stopTracers(); stopAnimation()
-        stopPulseDesync(); stopRagebotLoop()
+        stopPulseDesync(); stopRagebotLoop(); stopSoundSpam()
         Config.Weapons.ReloadSpeedEnabled=false; applyReloadPatch()
-        restorePosition()
-        Library:Unload()
+        if fovCircle then fovCircle:Remove() end
+        restorePosition(); Library:Unload()
     end,
-    DoubleClick=true,
-    Tooltip="Double-click to unload",
 })
 
 -- ═══════════════════════════════════════════
@@ -1688,8 +1761,10 @@ SaveManager:LoadAutoloadConfig()
 -- ═══════════════════════════════════════════
 Library:Notify("Rivals Tool loaded — " .. (IsMobile and "MOBILE" or "PC") .. " | DELETE = Emergency Stop", 6)
 print("[RIVALS TOOL] " .. (IsMobile and "MOBILE" or "PC"))
-print("[VOID]    Void Spam + Pure Desync + Pulse Desync + Weapon Tracker ready")
-print("[PROJ]    Projectile TP — Priority, TeamCheck, VisCheck, ShootAttempts, HitboxSize")
-print("[RAGEBOT] Hide/Attack timing + Persistence across rounds")
-print("[WEAPONS] Reload speed patcher ready")
-print("[EFFECTS] Explosion: " .. (ExplosionEffectFn and "✓" or "✗") .. "  Tracer: " .. (TracerEffectModule and "✓" or "✗") .. "  Anim: " .. (PlayAnimFn and "✓" or "✗"))
+print("[AIMBOT]  CameraController: " .. (CameraController and "✓" or "✗"))
+print("[DUMMY]   workspace.ShootingRangeEntities indices: 99, 40")
+print("[VOID]    Void Spam + Pure Desync + Pulse Desync + Weapon Tracker")
+print("[PROJ]    Projectile TP + Priority + Hitbox Expand + Shoot Attempts")
+print("[RAGEBOT] Hide/Attack timing + Persist across rounds")
+print("[SOUND]   Sound Spam — " .. #SOUND_ID_KEYS .. " preset IDs loaded")
+print("[EFFECTS] Explosion: " .. (ExplosionEffectFn and "✓" or "✗") .. " Tracer: " .. (TracerEffectModule and "✓" or "✗"))
