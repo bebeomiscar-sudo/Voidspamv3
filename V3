@@ -1,6 +1,6 @@
 --[[
     rivals tool
-    added: OmegaBot, Anti Projectile, Projectile Mimic
+    fixed: loadstring nil value crash on library load
 ]]
 
 if not game:IsLoaded() then
@@ -19,10 +19,70 @@ local CollectionService = cloneref(game:GetService("CollectionService"))
 local lp       = Players.LocalPlayer
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
-local repo         = "https://raw.githubusercontent.com/mstudio45/LinoriaLib/main/"
-local Library      = loadstring(game:HttpGet(repo .. "Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
-local SaveManager  = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+-- ═══════════════════════════════════════════════════════════════════════
+-- SAFE LIBRARY LOADER
+-- the original crash was here — if HttpGet fails or returns garbage
+-- loadstring returns nil and calling nil() = "attempt to call a nil value"
+-- we retry up to 3 times before giving up
+-- ═══════════════════════════════════════════════════════════════════════
+
+local repo = "https://raw.githubusercontent.com/mstudio45/LinoriaLib/main/"
+
+local function safeLoad(url, label)
+    local result = nil
+    local lastErr = "unknown"
+
+    for attempt = 1, 3 do
+        local httpOk, httpResult = pcall(function()
+            return game:HttpGet(url)
+        end)
+
+        if not httpOk then
+            lastErr = "HttpGet failed: " .. tostring(httpResult)
+            warn("[RivalsTool] " .. label .. " attempt " .. attempt .. " — " .. lastErr)
+            task.wait(1.5)
+            continue
+        end
+
+        if not httpResult or httpResult == "" then
+            lastErr = "empty response"
+            warn("[RivalsTool] " .. label .. " attempt " .. attempt .. " — " .. lastErr)
+            task.wait(1.5)
+            continue
+        end
+
+        local compileOk, compiled = pcall(loadstring, httpResult)
+
+        if not compileOk or not compiled then
+            lastErr = "loadstring failed: " .. tostring(compiled)
+            warn("[RivalsTool] " .. label .. " attempt " .. attempt .. " — " .. lastErr)
+            task.wait(1.5)
+            continue
+        end
+
+        local runOk, runResult = pcall(compiled)
+
+        if not runOk then
+            lastErr = "execution failed: " .. tostring(runResult)
+            warn("[RivalsTool] " .. label .. " attempt " .. attempt .. " — " .. lastErr)
+            task.wait(1.5)
+            continue
+        end
+
+        result = runResult
+        break
+    end
+
+    if not result then
+        error("[RivalsTool] Failed to load " .. label .. " after 3 attempts — last error: " .. lastErr, 2)
+    end
+
+    return result
+end
+
+local Library      = safeLoad(repo .. "Library.lua",              "LinoriaLib")
+local ThemeManager = safeLoad(repo .. "addons/ThemeManager.lua",  "ThemeManager")
+local SaveManager  = safeLoad(repo .. "addons/SaveManager.lua",   "SaveManager")
 
 if Library and Library.GetMouse then
     Library.GetMouse = function()
@@ -67,84 +127,50 @@ local Tabs = {
 }
 
 local Config = {
-    -- ─── OMEGABOT ─────────────────────────────────────────────────────────
-    --[[
-        OmegaBot is the "beats everything" feature
-        
-        it combines:
-        - multi-phase void spam (faster cycle than the 0.25/0.1 they use)
-        - full 360 degree projectile fire on ALL enemies simultaneously
-        - orbit aura that pulls enemies client-side into firetouchinterest range
-        - anti projectile that deflects incoming CoreProjectiles away
-        - melee strike detection that auto-fires when enemy swings
-        - dynamic hide time that shortens based on enemy distance (closer = faster)
-        - multi-thread shooting so each enemy gets hit in parallel
-        - position prediction so projectile TP leads moving targets
-    ]]
     OmegaBot = {
         Enabled           = false,
-        -- timing
-        HideTime          = 0.08,   -- faster than their 0.25
-        AttackTime        = 0.05,   -- faster than their 0.1
+        HideTime          = 0.08,
+        AttackTime        = 0.05,
         VoidAltitude      = 250000,
-        -- aura
-        OrbitAura         = true,   -- pull all enemies to you client-side
+        OrbitAura         = true,
         OrbitRadius       = 8,
         OrbitSpeed        = 6,
-        AuraFOV           = 360,    -- matches their 360/360 but actually hits everyone
-        -- shooting
-        ShootAttempts     = 3,      -- more attempts than their 1x
-        ShootInterval     = 0.01,   -- faster than their 0.4/2
-        MultiThread       = true,   -- shoot each enemy in a separate thread
-        -- anti projectile
+        AuraFOV           = 360,
+        ShootAttempts     = 3,
+        ShootInterval     = 0.01,
+        MultiThread       = true,
         AntiProjectile    = true,
-        AntiProjRadius    = 60,     -- studs around you to deflect
-        AntiProjAltitude  = 999999, -- where to send incoming projectiles
-        -- melee strike
+        AntiProjRadius    = 60,
+        AntiProjAltitude  = 999999,
         StrikeOnMelee     = true,
-        MeleeWindow       = 0.3,    -- seconds after melee detected to fire
-        -- prediction
+        MeleeWindow       = 0.3,
         Prediction        = true,
         PredictSteps      = 5,
-        -- misc
         TeamCheck         = true,
-        DynamicHide       = true,   -- shorten hide time when enemies are close
+        DynamicHide       = true,
         DynamicHideMin    = 0.04,
-        AllEnemies        = true,   -- hit ALL enemies not just closest
+        AllEnemies        = true,
         Priority          = "Closest",
+        PersistAcrossRounds = true,
     },
-
-    -- ─── ANTI PROJECTILE (standalone) ────────────────────────────────────
     AntiProjectile = {
         Enabled         = false,
         Radius          = 60,
         VoidAltitude    = 999999,
         RedirectToVoid  = true,
-        RedirectToSelf  = false,    -- teleport projectile under you (funny)
+        RedirectToSelf  = false,
         LogDeflects     = false,
     },
-
-    -- ─── PROJECTILE MIMIC ─────────────────────────────────────────────────
-    --[[
-        copies every CoreProjectile the enemy fires
-        and fires firetouchinterest on YOUR hitboxes from it
-        effectively turning their shots into shots that also hit them
-        
-        secondary use: mirrors the projectile direction so it curves
-        back toward the shooter (client side visual, but the touch
-        interest fires on their character too)
-    ]]
     ProjectileMimic = {
-        Enabled          = false,
-        MimicDelay       = 0,       -- how long to wait before mirroring (ms)
-        HitSelf          = false,   -- fire on our own hitbox too (for testing)
-        HitShooter       = true,    -- fire on the shooter's hitbox
-        HitboxPart       = "HitBoxHeadSmall",
-        Attempts         = 2,
-        TeamCheck        = true,
-        LogMimics        = false,
+        Enabled     = false,
+        MimicDelay  = 0,
+        HitSelf     = false,
+        HitShooter  = true,
+        HitboxPart  = "HitBoxHeadSmall",
+        Attempts    = 2,
+        TeamCheck   = true,
+        LogMimics   = false,
     },
-
     Aimbot = {
         Enabled      = false,
         Smoothness   = 10,
@@ -171,7 +197,7 @@ local Config = {
         Altitude  = 100000,
         Intensity = 100,
     },
-    PureDesync = { Enabled = false },
+    PureDesync  = { Enabled = false },
     PulseDesync = {
         Enabled      = false,
         HideTime     = 0.25,
@@ -246,36 +272,30 @@ local Config = {
     Safety         = { AutoDisableOnDeath = true, EmergencyKey = Enum.KeyCode.Delete },
 }
 
--- ═══════════════════════════════════════════════════════════════════════
--- STATE
--- ═══════════════════════════════════════════════════════════════════════
-
+-- state
 local hrp, clientCFrame, clientVelocity, clientAngularVelocity
 local pureHrp, pureClientC, pureClientV, pureClientVA
 local pulseHrp, pulseRealCF, pulseRealV, pulseRealVA
 local pulsePhase = "attack"
 local pulseTask  = nil
 
-local Connections    = {}
-local ProjectileCache = {}
-local EnemyCache     = {}
-
-local wtShootingPlayers = {}
-local wtVoidActive      = false
-local wtTeleportTask    = nil
-local wtHookActive      = false
-local wtConnections     = {}
+local Connections         = {}
+local ProjectileCache     = {}
+local EnemyCache          = {}
+local wtShootingPlayers   = {}
+local wtVoidActive        = false
+local wtTeleportTask      = nil
+local wtHookActive        = false
+local wtConnections       = {}
 local wtPlayerConnections = {}
-
-local ragebotWasEnabled  = false
-local ragebotPersistConn = nil
-local ragebotPhase       = "attack"
-local ragebotLoopTask    = nil
-
-local antiOOBHookRef       = nil
-local antiOOBHookActive    = false
+local ragebotWasEnabled   = false
+local ragebotPersistConn  = nil
+local ragebotPhase        = "attack"
+local ragebotLoopTask     = nil
+local antiOOBHookRef      = nil
+local antiOOBHookActive   = false
 local antiOOBModulePatched = false
-local antiOOBConnections   = {}
+local antiOOBConnections  = {}
 
 -- omegabot state
 local omegaPhase           = "attack"
@@ -288,15 +308,14 @@ local omegaRealV           = nil
 local omegaRealVA          = nil
 local omegaDeflectCount    = 0
 local omegaMimicCount      = 0
+local omegaMeleeConnections = {}
 
--- anti projectile standalone state
-local antiProjConnections  = {}
-local antiProjActive       = false
-
--- projectile mimic state
-local mimicConnections     = {}
-local mimicActive          = false
-local mimicSeenProjectiles = {}
+-- anti proj / mimic state
+local antiProjConnections   = {}
+local antiProjActive        = false
+local mimicConnections      = {}
+local mimicActive           = false
+local mimicSeenProjectiles  = {}
 
 -- aimbot state
 local camera           = Workspace.CurrentCamera
@@ -354,14 +373,12 @@ local function safeRequire(path)
     return ok and res or nil
 end
 
-pcall(function() local fn = safeRequire(lp.PlayerScripts.Modules.Functions:WaitForChild("ExplosionEffect")); if typeof(fn)=="function" then ExplosionEffectFn=fn end end)
-pcall(function() local m = safeRequire(lp.PlayerScripts.Modules:WaitForChild("TracerEffect")); if m then TracerEffectModule=m end end)
-pcall(function() local fn = safeRequire(lp.PlayerScripts.Modules.Functions:WaitForChild("PlayPreloadedAnimation")); if typeof(fn)=="function" then PlayAnimFn=fn end end)
-pcall(function() MobileController = safeRequire(lp.PlayerScripts.Controllers:WaitForChild("MobileController")) end)
+pcall(function() local fn = safeRequire(lp.PlayerScripts.Modules.Functions:WaitForChild("ExplosionEffect",5)); if typeof(fn)=="function" then ExplosionEffectFn=fn end end)
+pcall(function() local m  = safeRequire(lp.PlayerScripts.Modules:WaitForChild("TracerEffect",5)); if m then TracerEffectModule=m end end)
+pcall(function() local fn = safeRequire(lp.PlayerScripts.Modules.Functions:WaitForChild("PlayPreloadedAnimation",5)); if typeof(fn)=="function" then PlayAnimFn=fn end end)
+pcall(function() MobileController = safeRequire(lp.PlayerScripts.Controllers:WaitForChild("MobileController",5)) end)
 
--- ═══════════════════════════════════════════════════════════════════════
--- UTILITY
--- ═══════════════════════════════════════════════════════════════════════
+-- util
 
 local function randomExclude(min, max, dMin, dMax)
     if dMin <= min and dMax >= max then return min end
@@ -417,14 +434,14 @@ local ALL_PARTS = {
 }
 
 local PART_PRESETS = {
-    ["Head"]         = {"Head"},
+    ["Head"]             = {"Head"},
     ["HumanoidRootPart"] = {"HumanoidRootPart"},
-    ["Torso"]        = {"Torso","UpperTorso","LowerTorso","HumanoidRootPart"},
-    ["UpperTorso"]   = {"UpperTorso","Torso","LowerTorso","HumanoidRootPart"},
-    ["LowerTorso"]   = {"LowerTorso","Torso","UpperTorso","HumanoidRootPart"},
-    ["Body"]         = {"UpperTorso","LowerTorso","Torso","HumanoidRootPart"},
-    ["Head, Body"]   = {"Head","UpperTorso","LowerTorso","Torso","HumanoidRootPart"},
-    ["Random"]       = {"Random"},
+    ["Torso"]            = {"Torso","UpperTorso","LowerTorso","HumanoidRootPart"},
+    ["UpperTorso"]       = {"UpperTorso","Torso","LowerTorso","HumanoidRootPart"},
+    ["LowerTorso"]       = {"LowerTorso","Torso","UpperTorso","HumanoidRootPart"},
+    ["Body"]             = {"UpperTorso","LowerTorso","Torso","HumanoidRootPart"},
+    ["Head, Body"]       = {"Head","UpperTorso","LowerTorso","Torso","HumanoidRootPart"},
+    ["Random"]           = {"Random"},
 }
 
 local TARGET_OPTIONS = {"Head","HumanoidRootPart","Torso","UpperTorso","LowerTorso","Body","Head, Body","Random"}
@@ -437,7 +454,7 @@ local function getBestPart(char, setting)
         return #a > 0 and a[math.random(#a)] or nil
     end
     for _, pn in ipairs(preset) do local p = char:FindFirstChild(pn); if p then return p end end
-    for _, pn in ipairs(ALL_PARTS) do local p = char:FindFirstChild(pn); if p then return p end end
+    for _, pn in ipairs(ALL_PARTS)  do local p = char:FindFirstChild(pn); if p then return p end end
     return nil
 end
 
@@ -458,11 +475,24 @@ local function getEnemiesSorted(cfg)
         end
     end
     local p = cfg.Priority or "Closest"
-    if p == "Closest" then table.sort(list, function(a,b) return a.dist < b.dist end)
-    elseif p == "Furthest" then table.sort(list, function(a,b) return a.dist > b.dist end)
-    elseif p == "Random" then for i=#list,2,-1 do local j=math.random(i); list[i],list[j]=list[j],list[i] end
-    elseif p == "Lowest HP" then table.sort(list, function(a,b) local ha=a.player.Character:FindFirstChildOfClass("Humanoid"); local hb=b.player.Character:FindFirstChildOfClass("Humanoid"); return (ha and ha.Health or 0)<(hb and hb.Health or 0) end)
-    elseif p == "Highest HP" then table.sort(list, function(a,b) local ha=a.player.Character:FindFirstChildOfClass("Humanoid"); local hb=b.player.Character:FindFirstChildOfClass("Humanoid"); return (ha and ha.Health or 0)>(hb and hb.Health or 0) end)
+    if p == "Closest" then
+        table.sort(list, function(a,b) return a.dist < b.dist end)
+    elseif p == "Furthest" then
+        table.sort(list, function(a,b) return a.dist > b.dist end)
+    elseif p == "Random" then
+        for i=#list,2,-1 do local j=math.random(i); list[i],list[j]=list[j],list[i] end
+    elseif p == "Lowest HP" then
+        table.sort(list, function(a,b)
+            local ha = a.player.Character:FindFirstChildOfClass("Humanoid")
+            local hb = b.player.Character:FindFirstChildOfClass("Humanoid")
+            return (ha and ha.Health or 0) < (hb and hb.Health or 0)
+        end)
+    elseif p == "Highest HP" then
+        table.sort(list, function(a,b)
+            local ha = a.player.Character:FindFirstChildOfClass("Humanoid")
+            local hb = b.player.Character:FindFirstChildOfClass("Humanoid")
+            return (ha and ha.Health or 0) > (hb and hb.Health or 0)
+        end)
     end
     local out = {}
     for _, e in ipairs(list) do table.insert(out, e.player) end
@@ -477,47 +507,15 @@ local function cacheEnemies()
     EnemyCache = getEnemiesSorted()
 end
 
--- ═══════════════════════════════════════════════════════════════════════
--- PREDICTION
--- leads the target position based on their current velocity
--- so projectile TP connects even when they're moving fast
--- ═══════════════════════════════════════════════════════════════════════
-
 local function predictPosition(root, steps)
     if not root then return nil end
     local ok, pos = pcall(function()
-        local vel = root.AssemblyLinearVelocity
-        -- extrapolate forward by steps frames at 60fps
-        return root.Position + vel * (steps / 60)
+        return root.Position + root.AssemblyLinearVelocity * (steps / 60)
     end)
     return ok and pos or root.Position
 end
 
--- ═══════════════════════════════════════════════════════════════════════
--- OMEGABOT CORE
--- ═══════════════════════════════════════════════════════════════════════
-
---[[
-    how OmegaBot beats the orbit ragebot in the screenshots:
-    
-    their setup:
-    - void spam + 0.25s hide / 0.1s attack
-    - 360 FOV aimbot
-    - orbit aura, orbit anti projectile, orbit strike on melee
-    - 1 shoot attempt, 0.4s shot interval
-    
-    ours:
-    - 0.08s hide / 0.05s attack = 3x faster cycle
-    - ALL enemies hit simultaneously in parallel threads
-    - 3+ shoot attempts per target
-    - 0.01s shot interval
-    - anti projectile sends incoming shots to y=999999
-    - melee detection fires projectile TP the moment they swing
-    - position prediction leads moving targets
-    - dynamic hide time gets shorter as enemies get closer
-    - orbit aura pulls ALL enemies to orbit positions around us
-    - no FOV limit — we shoot everyone regardless of direction
-]]
+-- omegabot
 
 local function omegaGetHideTime()
     if not Config.OmegaBot.DynamicHide then return Config.OmegaBot.HideTime end
@@ -528,23 +526,25 @@ local function omegaGetHideTime()
         if player == lp then continue end
         if not isAlive(player) then continue end
         local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-        if root then
-            local d = (myRoot.Position - root.Position).Magnitude
-            if d < minDist then minDist = d end
-        end
+        if root then local d = (myRoot.Position - root.Position).Magnitude; if d < minDist then minDist = d end end
     end
-    -- closer enemy = shorter hide time (minimum DynamicHideMin)
-    local t = Config.OmegaBot.HideTime * math.clamp(minDist / 100, 0.3, 1)
-    return math.max(t, Config.OmegaBot.DynamicHideMin)
+    return math.max(Config.OmegaBot.HideTime * math.clamp(minDist / 100, 0.3, 1), Config.OmegaBot.DynamicHideMin)
+end
+
+local function omegaFindProjectile()
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj.Name == "CoreProjectile" and obj:FindFirstChild("TouchInterest") then return obj end
+    end
+    return nil
 end
 
 local function omegaFireOnEnemy(enemy, proj)
     if not enemy or not enemy.Character then return end
-    local hitPartName = Config.ProjectileTP.TargetPart
+    if not proj or not proj.Parent then return end
 
-    local function tryHitbox(name)
+    local function tryHit(name)
         local part = enemy.Character:FindFirstChild(name)
-        if not part or not proj then return end
+        if not part then return end
         for _ = 1, Config.OmegaBot.ShootAttempts do
             pcall(function() firetouchinterest(proj, part, 0) end)
             task.wait(Config.OmegaBot.ShootInterval)
@@ -552,55 +552,35 @@ local function omegaFireOnEnemy(enemy, proj)
         end
     end
 
-    tryHitbox(hitPartName)
-    tryHitbox("HitBoxHeadSmall")
-    tryHitbox("HitBoxHead")
-    tryHitbox("Head")
+    tryHit(Config.ProjectileTP.TargetPart)
+    tryHit("HitBoxHeadSmall")
+    tryHit("HitBoxHead")
+    tryHit("Head")
 
-    -- expanded hitbox for good measure
     pcall(function()
         local root = enemy.Character:FindFirstChild("HumanoidRootPart")
-        if root and proj then
-            local sz  = 12  -- bigger than default 5
-            local hb  = Instance.new("Part")
-            hb.Name        = "._OmegaHitbox"
-            hb.Size        = Vector3.new(sz, sz, sz)
-            hb.Anchored    = true
-            hb.CanCollide  = false
-            hb.Transparency = 1
-
-            -- if prediction is on, lead the target
-            if Config.OmegaBot.Prediction then
-                local predicted = predictPosition(root, Config.OmegaBot.PredictSteps)
-                hb.Position = predicted or root.Position
-            else
-                hb.Position = root.Position
-            end
-
-            hb.Parent = Workspace
-            firetouchinterest(proj, hb, 0)
-            task.wait(0.01)
-            firetouchinterest(proj, hb, 1)
-            task.delay(0.5, function() pcall(function() hb:Destroy() end) end)
-        end
+        if not root then return end
+        local sz = 12
+        local hb = Instance.new("Part")
+        hb.Name        = "._OmegaHitbox"
+        hb.Size        = Vector3.new(sz, sz, sz)
+        hb.Anchored    = true
+        hb.CanCollide  = false
+        hb.Transparency = 1
+        hb.Position    = Config.OmegaBot.Prediction
+            and (predictPosition(root, Config.OmegaBot.PredictSteps) or root.Position)
+            or root.Position
+        hb.Parent = Workspace
+        firetouchinterest(proj, hb, 0)
+        task.wait(0.01)
+        firetouchinterest(proj, hb, 1)
+        task.delay(0.5, function() pcall(function() hb:Destroy() end) end)
     end)
 end
 
-local function omegaFindProjectile()
-    for _, obj in ipairs(Workspace:GetChildren()) do
-        if obj.Name == "CoreProjectile" and obj:FindFirstChild("TouchInterest") then
-            return obj
-        end
-    end
-    return nil
-end
-
 local function omegaApplyOrbitAura(enemies)
-    -- pull all enemies to orbit positions around us client-side
-    -- this puts them all within firetouchinterest range
     local myRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
     if not myRoot then return end
-
     local t = tick() * Config.OmegaBot.OrbitSpeed
     for i, enemy in ipairs(enemies) do
         if not enemy.Character then continue end
@@ -609,9 +589,7 @@ local function omegaApplyOrbitAura(enemies)
         pcall(function()
             local angle = t + (i - 1) * (math.pi * 2 / math.max(#enemies, 1))
             local r     = Config.OmegaBot.OrbitRadius
-            root.CFrame = CFrame.new(
-                myRoot.Position + Vector3.new(math.sin(angle) * r, 0, math.cos(angle) * r)
-            )
+            root.CFrame = CFrame.new(myRoot.Position + Vector3.new(math.sin(angle)*r, 0, math.cos(angle)*r))
         end)
     end
 end
@@ -619,66 +597,39 @@ end
 local function omegaShootAll(enemies)
     local proj = omegaFindProjectile()
     if not proj then return end
-
     if Config.OmegaBot.MultiThread then
-        -- fire at each enemy in its own thread simultaneously
-        for _, enemy in ipairs(enemies) do
-            task.spawn(function()
-                omegaFireOnEnemy(enemy, proj)
-            end)
-        end
+        for _, enemy in ipairs(enemies) do task.spawn(omegaFireOnEnemy, enemy, proj) end
     else
-        for _, enemy in ipairs(enemies) do
-            omegaFireOnEnemy(enemy, proj)
-        end
+        for _, enemy in ipairs(enemies) do omegaFireOnEnemy(enemy, proj) end
     end
 end
 
 local function startOmegaBot()
     if omegaTask then task.cancel(omegaTask); omegaTask = nil end
-
     omegaTask = task.spawn(function()
         while Config.OmegaBot.Enabled do
             local char = lp.Character
             if not char then task.wait(0.1); continue end
-
             local root = char:FindFirstChild("HumanoidRootPart")
             if not root then task.wait(0.1); continue end
 
-            -- save real position
-            omegaHrp  = root
-            omegaRealCF  = root.CFrame
-            omegaRealV   = root.AssemblyLinearVelocity
-            omegaRealVA  = root.AssemblyAngularVelocity
+            omegaHrp    = root
+            omegaRealCF = root.CFrame
+            omegaRealV  = root.AssemblyLinearVelocity
+            omegaRealVA = root.AssemblyAngularVelocity
 
-            local enemies = getEnemiesSorted({
-                TeamCheck  = Config.OmegaBot.TeamCheck,
-                Priority   = Config.OmegaBot.Priority,
-                MaxDistance = 999,
-            })
-
+            local enemies = getEnemiesSorted({TeamCheck=Config.OmegaBot.TeamCheck, Priority=Config.OmegaBot.Priority, MaxDistance=999})
             if #enemies == 0 then task.wait(0.1); continue end
 
-            -- apply orbit aura (pull enemies to us)
-            if Config.OmegaBot.OrbitAura then
-                omegaApplyOrbitAura(enemies)
-            end
+            if Config.OmegaBot.OrbitAura then omegaApplyOrbitAura(enemies) end
 
-            -- HIDE PHASE: send server to void
             omegaPhase = "hide"
-            local hideAlt = Config.OmegaBot.VoidAltitude
-            root.CFrame = CFrame.new(
-                omegaRealCF.Position.X + math.random(-30, 30),
-                hideAlt,
-                omegaRealCF.Position.Z + math.random(-30, 30)
-            )
+            root.CFrame = CFrame.new(omegaRealCF.Position.X + math.random(-30,30), Config.OmegaBot.VoidAltitude, omegaRealCF.Position.Z + math.random(-30,30))
             root.AssemblyLinearVelocity  = Vector3.zero
             root.AssemblyAngularVelocity = Vector3.zero
 
-            local hideTime = omegaGetHideTime()
-            task.wait(hideTime)
+            task.wait(omegaGetHideTime())
 
-            -- ATTACK PHASE: restore and shoot everyone
             omegaPhase = "attack"
             if omegaHrp and omegaHrp.Parent then
                 pcall(function()
@@ -688,7 +639,6 @@ local function startOmegaBot()
                 end)
             end
 
-            -- auto shoot tool
             pcall(function()
                 local tool = char:FindFirstChildOfClass("Tool")
                 if tool then tool:Activate() end
@@ -696,12 +646,10 @@ local function startOmegaBot()
 
             task.wait(0.01)
             omegaShootAll(enemies)
-
             task.wait(Config.OmegaBot.AttackTime)
 
             if not Config.OmegaBot.Enabled then break end
         end
-
         omegaTask  = nil
         omegaPhase = "attack"
     end)
@@ -711,7 +659,6 @@ local function stopOmegaBot()
     Config.OmegaBot.Enabled = false
     if omegaTask then task.cancel(omegaTask); omegaTask = nil end
     omegaPhase = "attack"
-    -- restore position
     if omegaHrp and omegaRealCF and omegaHrp.Parent then
         pcall(function()
             omegaHrp.CFrame                  = omegaRealCF
@@ -721,30 +668,19 @@ local function stopOmegaBot()
     end
 end
 
--- omegabot melee strike detection
--- watches enemy tool.Activated for melee weapons and fires instantly
-
-local omegaMeleeConnections = {}
-
 local function omegaHookMelee(player)
     if player == lp then return end
     omegaMeleeConnections[player] = omegaMeleeConnections[player] or {}
 
     local function hookTool(tool)
-        -- check if its a melee weapon (no ammo attribute = likely melee)
         local conn = tool.Activated:Connect(function()
-            if not Config.OmegaBot.Enabled then return end
-            if not Config.OmegaBot.StrikeOnMelee then return end
+            if not Config.OmegaBot.Enabled or not Config.OmegaBot.StrikeOnMelee then return end
             if Config.OmegaBot.TeamCheck and sameTeam(player) then return end
-
-            -- fire on them within the melee window
             task.spawn(function()
                 local deadline = tick() + Config.OmegaBot.MeleeWindow
                 while tick() < deadline and Config.OmegaBot.Enabled do
                     local proj = omegaFindProjectile()
-                    if proj then
-                        omegaFireOnEnemy(player, proj)
-                    end
+                    if proj then omegaFireOnEnemy(player, proj) end
                     task.wait(0.02)
                 end
             end)
@@ -753,12 +689,8 @@ local function omegaHookMelee(player)
     end
 
     local function watchChar(char)
-        for _, child in ipairs(char:GetChildren()) do
-            if child:IsA("Tool") then task.spawn(hookTool, child) end
-        end
-        local c = char.ChildAdded:Connect(function(child)
-            if child:IsA("Tool") then task.spawn(hookTool, child) end
-        end)
+        for _, child in ipairs(char:GetChildren()) do if child:IsA("Tool") then task.spawn(hookTool, child) end end
+        local c = char.ChildAdded:Connect(function(child) if child:IsA("Tool") then task.spawn(hookTool, child) end end)
         table.insert(omegaMeleeConnections[player], c)
     end
 
@@ -779,7 +711,6 @@ end
 local function setupOmegaPersist()
     if omegaPersistConn then omegaPersistConn:Disconnect() end
     omegaPersistConn = lp.CharacterAdded:Connect(function(char)
-        if not Config.OmegaBot.PersistAcrossRounds and not omegaWasEnabled then return end
         if not omegaWasEnabled then return end
         char:WaitForChild("HumanoidRootPart", 10)
         task.wait(1.5)
@@ -797,72 +728,47 @@ local function enableOmegaBot()
     startOmegaBot()
     startOmegaMeleeHooks()
     setupOmegaPersist()
-    Library:Notify("OmegaBot enabled — hide:" .. math.floor(Config.OmegaBot.HideTime*1000) .. "ms attack:" .. math.floor(Config.OmegaBot.AttackTime*1000) .. "ms", 4)
+    Library:Notify("OmegaBot on — hide:" .. math.floor(Config.OmegaBot.HideTime*1000) .. "ms attack:" .. math.floor(Config.OmegaBot.AttackTime*1000) .. "ms", 4)
 end
 
 local function disableOmegaBot()
     omegaWasEnabled = false
     stopOmegaBot()
-    for _, player in pairs(omegaMeleeConnections) do
-        for _, conn in ipairs(player) do pcall(function() conn:Disconnect() end) end
+    for _, conns in pairs(omegaMeleeConnections) do
+        for _, conn in ipairs(conns) do pcall(function() conn:Disconnect() end) end
     end
     omegaMeleeConnections = {}
 end
 
--- ═══════════════════════════════════════════════════════════════════════
--- ANTI PROJECTILE
--- watches for CoreProjectiles near us and sends them to the void
--- works for both standalone and as part of OmegaBot
--- ═══════════════════════════════════════════════════════════════════════
+-- anti projectile
 
-local function deflectProjectile(proj, reason)
+local function deflectProjectile(proj)
     pcall(function()
-        local alt = Config.AntiProjectile.Enabled
-            and Config.AntiProjectile.VoidAltitude
-            or Config.OmegaBot.AntiProjAltitude
-
-        if Config.AntiProjectile.RedirectToSelf and Config.AntiProjectile.Enabled then
-            -- teleport it under us (harmless, also funny)
+        local alt = Config.AntiProjectile.Enabled and Config.AntiProjectile.VoidAltitude or Config.OmegaBot.AntiProjAltitude
+        if Config.AntiProjectile.RedirectToSelf then
             local char = lp.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
-            if root then
-                proj.CFrame = CFrame.new(root.Position + Vector3.new(0, -10, 0))
-            end
+            if root then proj.CFrame = CFrame.new(root.Position + Vector3.new(0, -10, 0)) end
         else
-            -- send to void
             proj.CFrame = CFrame.new(math.random(-1000,1000), alt, math.random(-1000,1000))
         end
         proj.AssemblyLinearVelocity  = Vector3.zero
         proj.AssemblyAngularVelocity = Vector3.zero
-
         omegaDeflectCount += 1
-        if Config.AntiProjectile.LogDeflects then
-            Library:Notify("Deflected projectile [" .. reason .. "] #" .. omegaDeflectCount, 1)
-        end
+        if Config.AntiProjectile.LogDeflects then Library:Notify("Deflected #" .. omegaDeflectCount, 1) end
     end)
 end
 
 local function isEnemyProjectile(proj)
-    -- try to figure out if this projectile belongs to an enemy
-    -- check proximity to enemy characters at spawn time
     local myRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
     if not myRoot then return false end
-
-    -- if it spawned close to an enemy and is heading toward us it's hostile
-    local projPos = pcall(function() return proj.Position end) and proj.Position or nil
-    if not projPos then return false end
-
+    local ok, projPos = pcall(function() return proj.Position end)
+    if not ok then return false end
     for _, player in ipairs(Players:GetPlayers()) do
         if player == lp then continue end
         if Config.AntiProjectile.Enabled and sameTeam(player) then continue end
-        if Config.OmegaBot.TeamCheck and sameTeam(player) then continue end
         local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-        if root then
-            -- spawned within 35 studs of an enemy = their projectile
-            if (projPos - root.Position).Magnitude < 35 then
-                return true, player
-            end
-        end
+        if root and (projPos - root.Position).Magnitude < 35 then return true end
     end
     return false
 end
@@ -875,33 +781,22 @@ local function startAntiProjectile()
     local conn = Workspace.ChildAdded:Connect(function(obj)
         if not (Config.AntiProjectile.Enabled or Config.OmegaBot.AntiProjectile) then return end
         if obj.Name ~= "CoreProjectile" then return end
-
         task.defer(function()
-            -- give it a frame to get its position set
             local myRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
             if not myRoot then return end
-
             pcall(function()
-                local radius = Config.AntiProjectile.Enabled
-                    and Config.AntiProjectile.Radius
-                    or Config.OmegaBot.AntiProjRadius
-
-                -- check every frame if it's getting close to us
-                local checkConn
+                local radius = Config.AntiProjectile.Enabled and Config.AntiProjectile.Radius or Config.OmegaBot.AntiProjRadius
                 local frames = 0
+                local checkConn
                 checkConn = RunService.Heartbeat:Connect(function()
                     frames += 1
-                    if frames > 120 then checkConn:Disconnect(); return end  -- stop after 2 seconds
+                    if frames > 120 then checkConn:Disconnect(); return end
                     if not obj or not obj.Parent then checkConn:Disconnect(); return end
-
                     local ok, projPos = pcall(function() return obj.Position end)
                     if not ok then checkConn:Disconnect(); return end
-
-                    local dist = (projPos - myRoot.Position).Magnitude
-                    if dist < radius then
-                        local isEnemy = isEnemyProjectile(obj)
-                        if isEnemy then
-                            deflectProjectile(obj, "proximity " .. math.floor(dist) .. "st")
+                    if (projPos - myRoot.Position).Magnitude < radius then
+                        if isEnemyProjectile(obj) then
+                            deflectProjectile(obj)
                             checkConn:Disconnect()
                         end
                     end
@@ -918,37 +813,20 @@ local function stopAntiProjectile()
     antiProjConnections = {}
 end
 
--- ═══════════════════════════════════════════════════════════════════════
--- PROJECTILE MIMIC
---[[
-    when an enemy fires a CoreProjectile:
-    1. we detect it spawned near them
-    2. we fire firetouchinterest from THEIR projectile onto THEIR hitbox
-    3. effectively their own shot registers on them
-    4. optional: also hits every other enemy with the same projectile
-    
-    this is different from normal projectile TP because:
-    - we're using the ENEMY'S projectile, not ours
-    - it fires as soon as they shoot, before it can reach us
-    - we don't need to shoot first
-]]
--- ═══════════════════════════════════════════════════════════════════════
+-- projectile mimic
 
 local function mimicFire(proj, shooter)
     if not proj or not proj.Parent then return end
     if not shooter or not shooter.Character then return end
     if Config.ProjectileMimic.TeamCheck and sameTeam(shooter) then return end
 
-    local hitName = Config.ProjectileMimic.HitboxPart
-
     local function fireOnChar(char)
         if not char then return end
-        local part = char:FindFirstChild(hitName)
+        local part = char:FindFirstChild(Config.ProjectileMimic.HitboxPart)
             or char:FindFirstChild("HitBoxHead")
             or char:FindFirstChild("HitBoxHeadSmall")
             or char:FindFirstChild("Head")
         if not part then return end
-
         for _ = 1, Config.ProjectileMimic.Attempts do
             pcall(function() firetouchinterest(proj, part, 0) end)
             task.wait(0.01)
@@ -956,24 +834,17 @@ local function mimicFire(proj, shooter)
         end
     end
 
-    -- fire on the shooter themselves (their own shot hits them)
-    if Config.ProjectileMimic.HitShooter then
-        task.spawn(fireOnChar, shooter.Character)
-    end
+    if Config.ProjectileMimic.HitShooter then task.spawn(fireOnChar, shooter.Character) end
 
-    -- also fire on all other enemies with this projectile
     for _, player in ipairs(Players:GetPlayers()) do
-        if player == lp then continue end
-        if player == shooter then continue end
+        if player == lp or player == shooter then continue end
         if Config.ProjectileMimic.TeamCheck and sameTeam(player) then continue end
         if not isAlive(player) then continue end
         task.spawn(fireOnChar, player.Character)
     end
 
     omegaMimicCount += 1
-    if Config.ProjectileMimic.LogMimics then
-        Library:Notify("Mimic fired from " .. shooter.Name .. " proj #" .. omegaMimicCount, 1)
-    end
+    if Config.ProjectileMimic.LogMimics then Library:Notify("Mimic from " .. shooter.Name .. " #" .. omegaMimicCount, 1) end
 end
 
 local function startProjectileMimic()
@@ -989,10 +860,7 @@ local function startProjectileMimic()
         mimicSeenProjectiles[obj] = true
 
         task.defer(function()
-            -- identify whose projectile this is
             local shooter = nil
-            local myRoot  = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-
             pcall(function()
                 local projPos = obj.Position
                 for _, player in ipairs(Players:GetPlayers()) do
@@ -1000,24 +868,16 @@ local function startProjectileMimic()
                     if not isAlive(player) then continue end
                     local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
                     if root and (projPos - root.Position).Magnitude < 35 then
-                        shooter = player
-                        break
+                        shooter = player; break
                     end
                 end
             end)
-
             if not shooter then return end
             if Config.ProjectileMimic.TeamCheck and sameTeam(shooter) then return end
-
             local delay = Config.ProjectileMimic.MimicDelay / 1000
             if delay > 0 then task.wait(delay) end
-
             mimicFire(obj, shooter)
-
-            -- clean up seen table when projectile is removed
-            obj.AncestryChanged:Connect(function(_, parent)
-                if not parent then mimicSeenProjectiles[obj] = nil end
-            end)
+            obj.AncestryChanged:Connect(function(_, parent) if not parent then mimicSeenProjectiles[obj] = nil end end)
         end)
     end)
 
@@ -1031,9 +891,7 @@ local function stopProjectileMimic()
     mimicConnections = {}
 end
 
--- ═══════════════════════════════════════════════════════════════════════
--- AIMBOT
--- ═══════════════════════════════════════════════════════════════════════
+-- aimbot
 
 local function aimbotFOV()
     local f = Config.Aimbot.MaxFOV
@@ -1114,14 +972,14 @@ local function getDummyPart()
         or dummy:FindFirstChildOfClass("BasePart")
 end
 
-local function rotateTo(pos, smoothness)
+local function rotateTo(pos)
     if not CameraController then return end
     pcall(function()
         local cp  = camera.CFrame.Position
         local dir = (pos - cp).Unit
         local tP  = math.asin(math.clamp(dir.Y, -1, 1))
         local tY  = math.atan2(-dir.X, -dir.Z)
-        local sm  = math.clamp(1 / math.max(smoothness or Config.Aimbot.Smoothness, 0.1), 0.01, 1)
+        local sm  = math.clamp(1 / math.max(Config.Aimbot.Smoothness, 0.1), 0.01, 1)
         local cur = CameraController.Rotation
         CameraController:SetRotation(Vector2.new(
             cur.X + (tP - cur.X) * sm,
@@ -1147,6 +1005,7 @@ local function runAimbot(dt)
     end
 
     if not Config.Aimbot.Enabled then return end
+
     if isInReaction then
         reactionTimer -= dt
         if reactionTimer <= 0 then isInReaction = false end
@@ -1156,6 +1015,7 @@ local function runAimbot(dt)
     if lockedTarget and not targetStillValid(lockedTarget) then
         lockedTarget = nil; lockTimer = 0; resetDelayed()
     end
+
     if not lockedTarget then
         local t = findTarget()
         if t then
@@ -1179,9 +1039,7 @@ local function runAimbot(dt)
     end
 end
 
--- ═══════════════════════════════════════════════════════════════════════
--- SOUND SPAM
--- ═══════════════════════════════════════════════════════════════════════
+-- sound spam
 
 local function playSoundOnce(soundId, volume)
     pcall(function()
@@ -1213,9 +1071,7 @@ local function stopSoundSpam()
     if soundSpamTask then task.cancel(soundSpamTask); soundSpamTask = nil end
 end
 
--- ═══════════════════════════════════════════════════════════════════════
--- VOID METHODS
--- ═══════════════════════════════════════════════════════════════════════
+-- void methods
 
 local VoidMethods = {}
 
@@ -1230,7 +1086,7 @@ end
 VoidMethods["Projectile TP"] = function()
     local pos = clientCFrame.Position
     hrp.CFrame = CFrame.new(pos.X+math.random(-100,100), Config.VoidSpam.Altitude, pos.Z+math.random(-100,100))
-    hrp.AssemblyLinearVelocity  = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
+    hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
 end
 
 VoidMethods["Orbital Void"] = function()
@@ -1245,12 +1101,10 @@ VoidMethods["Controlled Void"] = function()
 end
 
 VoidMethods["Seizure Mode"] = function()
-    local p = {{100000,100000,100000},{-100000,100000,-100000},{100000,-100000,100000},{-100000,-100000,-100000}}
-    local v = p[math.floor(tick()*10)%4+1]
-    hrp.CFrame = CFrame.new(v[1],v[2],v[3]); hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
+    local positions = {Vector3.new(100000,100000,100000),Vector3.new(-100000,100000,-100000),Vector3.new(100000,-100000,100000),Vector3.new(-100000,-100000,-100000)}
+    hrp.CFrame = CFrame.new(positions[math.floor(tick()*10)%4+1])
+    hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
 end
-
--- pure desync
 
 Connections.PureDesyncHB = RunService.Heartbeat:Connect(function()
     if not Config.PureDesync.Enabled then return end
@@ -1268,8 +1122,6 @@ RunService:BindToRenderStep("PureDesyncRestore", Enum.RenderPriority.First.Value
         pcall(function() pureHrp.CFrame = pureClientC; pureHrp.AssemblyLinearVelocity = pureClientV; pureHrp.AssemblyAngularVelocity = pureClientVA end)
     end
 end)
-
--- pulse desync
 
 local function startPulseDesync()
     if pulseTask then task.cancel(pulseTask); pulseTask = nil end
@@ -1305,8 +1157,6 @@ local function stopPulseDesync()
     end
     pulsePhase = "attack"; pulseHrp = nil
 end
-
--- void spam loops
 
 Connections.VoidHB = RunService.Heartbeat:Connect(function()
     if not Config.VoidSpam.Enabled then return end
@@ -1360,9 +1210,9 @@ local function wtHookPlayer(player)
     wtPlayerConnections[player] = {}
 
     local function hookTool(tool)
-        local ac = tool.Activated:Connect(function() if not Config.WeaponTracker.Enabled then return end; wtOnShootStart(player) end)
-        local dc = tool.Deactivated:Connect(function() if not Config.WeaponTracker.Enabled then return end; wtOnShootStop(player) end)
-        local uc = tool.AncestryChanged:Connect(function(_, parent) if not parent or not parent:IsDescendantOf(Workspace) then wtOnShootStop(player) end end)
+        local ac = tool.Activated:Connect(function() if Config.WeaponTracker.Enabled then wtOnShootStart(player) end end)
+        local dc = tool.Deactivated:Connect(function() if Config.WeaponTracker.Enabled then wtOnShootStop(player) end end)
+        local uc = tool.AncestryChanged:Connect(function(_, p) if not p or not p:IsDescendantOf(Workspace) then wtOnShootStop(player) end end)
         table.insert(wtPlayerConnections[player], ac); table.insert(wtPlayerConnections[player], dc); table.insert(wtPlayerConnections[player], uc)
     end
 
@@ -1371,16 +1221,14 @@ local function wtHookPlayer(player)
         local ac = char.ChildAdded:Connect(function(child) if child:IsA("Tool") then task.spawn(hookTool, child) end end)
         table.insert(wtPlayerConnections[player], ac)
         local pc = Workspace.ChildAdded:Connect(function(obj)
-            if not Config.WeaponTracker.Enabled then return end
-            if obj.Name ~= "CoreProjectile" then return end
-            if not wtIsEnemy(player) then return end
+            if not Config.WeaponTracker.Enabled or obj.Name ~= "CoreProjectile" or not wtIsEnemy(player) then return end
             local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
             task.defer(function()
                 pcall(function()
                     local pp = obj:FindFirstChildOfClass("BasePart") or obj
-                    if typeof(pp.Position) == "Vector3" and (pp.Position - root.Position).Magnitude < 30 then
+                    if (pp.Position - root.Position).Magnitude < 30 then
                         wtOnShootStart(player)
-                        local rc; rc = obj.AncestryChanged:Connect(function(_, p) if not p then wtOnShootStop(player); rc:Disconnect() end end)
+                        local rc; rc = obj.AncestryChanged:Connect(function(_, p2) if not p2 then wtOnShootStop(player); rc:Disconnect() end end)
                     end
                 end)
             end)
@@ -1391,7 +1239,8 @@ local function wtHookPlayer(player)
     if player.Character then task.spawn(watchChar, player.Character) end
     local cac = player.CharacterAdded:Connect(function(char)
         for i = #wtPlayerConnections[player], 1, -1 do
-            local c = wtPlayerConnections[player][i]; pcall(function() c:Disconnect() end); table.remove(wtPlayerConnections[player], i)
+            pcall(function() wtPlayerConnections[player][i]:Disconnect() end)
+            table.remove(wtPlayerConnections[player], i)
         end
         wtOnShootStop(player); task.spawn(watchChar, char)
     end)
@@ -1425,7 +1274,7 @@ local function stopWeaponTracker()
     if wtTeleportTask then task.cancel(wtTeleportTask); wtTeleportTask = nil end
 end
 
--- projectile tp
+-- projectile tp loops
 
 Connections.ProjectileTP = RunService.Heartbeat:Connect(function()
     if not Config.ProjectileTP.Enabled then return end
@@ -1483,9 +1332,7 @@ local function startRagebotLoop()
                             local t = tick()*Config.Ragebot.OrbitSpeed; local r = Config.Ragebot.OrbitRadius
                             enemyRoot.CFrame = CFrame.new(myRoot.Position + Vector3.new(math.sin(t)*r, 0, math.cos(t)*r))
                         end
-                        task.wait(Config.Ragebot.HideTime)
-                        ragebotPhase = "attack"
-                        task.wait(Config.Ragebot.AttackTime)
+                        task.wait(Config.Ragebot.HideTime); ragebotPhase = "attack"; task.wait(Config.Ragebot.AttackTime)
                     else
                         ragebotPhase = "attack"
                         if Config.Ragebot.ClientTP then
@@ -1521,13 +1368,16 @@ local function disableRagebot()
     Config.Ragebot.Enabled = false; ragebotWasEnabled = false; stopRagebotLoop()
 end
 
--- misc
+-- anti oob
 
 local function antiOOB_PatchModule()
     if antiOOBModulePatched then return end
     pcall(function()
         local m = require(ReplicatedStorage.Modules.OutOfBoundsMachine)
-        if m then if m.IsOutOfBounds then m.IsOutOfBounds = function() return nil end end; if m.Update then m.Update = function() end end end
+        if m then
+            if m.IsOutOfBounds then m.IsOutOfBounds = function() return nil end end
+            if m.Update then m.Update = function() end end
+        end
         antiOOBModulePatched = true; Library:Notify("Anti OOB: module patched", 2)
     end)
 end
@@ -1538,7 +1388,9 @@ local function antiOOB_SpoofRemote()
         local remote = ReplicatedStorage.Remotes.Replication.Fighter.OutOfBounds
         antiOOBHookRef = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
             local method = getnamecallmethod()
-            if (method == "FireServer" or method == "InvokeServer") and self == remote then if Config.AntiOOB.SpoofRemote then return end end
+            if (method == "FireServer" or method == "InvokeServer") and self == remote then
+                if Config.AntiOOB.SpoofRemote then return end
+            end
             return antiOOBHookRef(self, ...)
         end))
         antiOOBHookActive = true; Library:Notify("Anti OOB: remote spoofed", 2)
@@ -1562,8 +1414,11 @@ end
 
 local function stopAntiOOB()
     Config.AntiOOB.Enabled = false; antiOOB_StopSpoof()
-    for _, c in ipairs(antiOOBConnections) do pcall(function() c:Disconnect() end) end; antiOOBConnections = {}
+    for _, c in ipairs(antiOOBConnections) do pcall(function() c:Disconnect() end) end
+    antiOOBConnections = {}
 end
+
+-- effects
 
 local function triggerExplosion(pos, size)
     if not ExplosionEffectFn then return end
@@ -1592,7 +1447,11 @@ local function startLoopExplosions()
     if loopExplosionTask then return end
     loopExplosionTask = task.spawn(function()
         while Config.ExplosionEffect.Enabled and Config.ExplosionEffect.LoopExplosions do
-            pcall(function() local char = lp.Character; if not char then return end; local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end; triggerExplosion(root.Position + Vector3.new(math.random(-5,5),math.random(0,3),math.random(-5,5)), Config.ExplosionEffect.Size*0.5) end)
+            pcall(function()
+                local char = lp.Character; if not char then return end
+                local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+                triggerExplosion(root.Position + Vector3.new(math.random(-5,5),math.random(0,3),math.random(-5,5)), Config.ExplosionEffect.Size*0.5)
+            end)
             task.wait(Config.ExplosionEffect.LoopInterval)
         end
         loopExplosionTask = nil
@@ -1617,7 +1476,9 @@ local function startTracerHooks()
             pcall(function()
                 local myRoot = char:FindFirstChild("HumanoidRootPart"); if not myRoot then return end
                 local toPos
-                if Config.TracerEffect.TraceToEnemy then local e = getClosestEnemy(); if e and e.Character then local r = e.Character:FindFirstChild("HumanoidRootPart"); if r then toPos = r.Position end end
+                if Config.TracerEffect.TraceToEnemy then
+                    local e = getClosestEnemy()
+                    if e and e.Character then local r = e.Character:FindFirstChild("HumanoidRootPart"); if r then toPos = r.Position end end
                 else local cam = Workspace.CurrentCamera; toPos = cam.CFrame.Position + cam.CFrame.LookVector * 200 end
                 if toPos then playTracer(myRoot.Position, toPos) end
             end)
@@ -1637,11 +1498,12 @@ local function playAnimation(animId, looped, speed)
     if PlayAnimFn then pcall(function() PlayAnimFn(animId, looped, speed) end); return end
     pcall(function()
         local char = lp.Character; if not char then return end
-        local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-        local animator = hum:FindFirstChildOfClass("Animator") or Instance.new("Animator", hum)
+        local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+        local anim = hum:FindFirstChildOfClass("Animator") or Instance.new("Animator", hum)
         if activeAnimTrack then pcall(function() activeAnimTrack:Stop() end); activeAnimTrack = nil end
-        local anim = Instance.new("Animation"); anim.AnimationId = "rbxassetid://" .. tostring(animId):gsub("[^%d]","")
-        local track = animator:LoadAnimation(anim); track.Looped = looped or false; track:AdjustSpeed(speed or 1); track:Play(); activeAnimTrack = track; anim:Destroy()
+        local a = Instance.new("Animation"); a.AnimationId = "rbxassetid://" .. tostring(animId):gsub("[^%d]","")
+        local track = anim:LoadAnimation(a); track.Looped = looped or false; track:AdjustSpeed(speed or 1); track:Play()
+        activeAnimTrack = track; a:Destroy()
     end)
 end
 
@@ -1664,7 +1526,9 @@ local function applyMobileSettings()
     end)
     pcall(function()
         if Config.MobileCtrl.DisableMobilePrompts then
-            for _, tag in ipairs(CollectionService:GetTagged("LobbyMobileDuelsPrompt")) do local m = tag:FindFirstChild("Model"); if m then m.Parent = nil end end
+            for _, tag in ipairs(CollectionService:GetTagged("LobbyMobileDuelsPrompt")) do
+                local m = tag:FindFirstChild("Model"); if m then m.Parent = nil end
+            end
         end
     end)
 end
@@ -1672,13 +1536,16 @@ end
 local reloadOriginals = {}
 local function applyReloadPatch()
     pcall(function()
-        local IL = require(ReplicatedStorage.Modules.ItemLibrary); local Items = rawget(IL, "Items"); if not Items then return end
+        local IL    = require(ReplicatedStorage.Modules.ItemLibrary)
+        local Items = rawget(IL, "Items"); if not Items then return end
         for _, item in Items do
             local name = item.Name; if not table.find(Config.Weapons.Whitelist, name) then continue end
             if not item["ReloadLength"] then continue end
             if not reloadOriginals[name] then reloadOriginals[name] = item.ReloadLength end
-            if Config.Weapons.ReloadSpeedEnabled then rawset(item, "ReloadLength", name=="Daggers" and math.max(Config.Weapons.ReloadLength, 0.09) or Config.Weapons.ReloadLength)
-            else rawset(item, "ReloadLength", reloadOriginals[name]) end
+            rawset(item, "ReloadLength", Config.Weapons.ReloadSpeedEnabled
+                and (name=="Daggers" and math.max(Config.Weapons.ReloadLength, 0.09) or Config.Weapons.ReloadLength)
+                or reloadOriginals[name]
+            )
         end
     end)
 end
@@ -1686,7 +1553,10 @@ end
 local raknetActive = false; local raknetHookRef = nil
 local function startRakNet()
     if raknetActive then return end
-    local ok = pcall(function() raknetHookRef = function(packet) if packet.PacketId==0x1B then local d=packet.AsBuffer; buffer.writeu32(d,1,0xFFFFFFFF); packet:SetData(d) end end; raknet.add_send_hook(raknetHookRef); raknetActive=true end)
+    local ok = pcall(function()
+        raknetHookRef = function(packet) if packet.PacketId==0x1B then local d=packet.AsBuffer; buffer.writeu32(d,1,0xFFFFFFFF); packet:SetData(d) end end
+        raknet.add_send_hook(raknetHookRef); raknetActive = true
+    end)
     if not ok then Library:Notify("RakNet hook failed", 4); Config.RakNet.Enabled = false end
 end
 local function stopRakNet()
@@ -1705,7 +1575,7 @@ Connections.AutoCollect = RunService.RenderStepped:Connect(function()
             if obj.Name == "_drop" and obj:IsA("BasePart") then
                 local wantHp   = Config.AutoCollect.CollectHealth and obj:FindFirstChild("Health") and needsHp
                 local wantAmmo = Config.AutoCollect.CollectAmmo   and obj:FindFirstChild("Ammo")
-                if wantHp or wantAmmo then firetouchinterest(myRoot, obj, 0); firetouchinterest(myRoot, obj, 1) end
+                if wantHp or wantAmmo then firetouchinterest(myRoot,obj,0); firetouchinterest(myRoot,obj,1) end
             end
         end
     end)
@@ -1717,9 +1587,9 @@ RunService.RenderStepped:Connect(function(dt) camera = Workspace.CurrentCamera; 
 
 local function disableAll()
     disableOmegaBot(); stopAntiProjectile(); stopProjectileMimic()
-    Config.Aimbot.Enabled=false; Config.TrackDummy.Enabled=false; Config.VoidSpam.Enabled=false; Config.PureDesync.Enabled=false
-    Config.WeaponTracker.Enabled=false; Config.ProjectileTP.Enabled=false; Config.AutoCollect.Enabled=false
-    Config.ExplosionEffect.Enabled=false; Config.TracerEffect.Enabled=false; Config.SoundSpam.Enabled=false
+    Config.Aimbot.Enabled=false; Config.TrackDummy.Enabled=false; Config.VoidSpam.Enabled=false
+    Config.PureDesync.Enabled=false; Config.WeaponTracker.Enabled=false; Config.ProjectileTP.Enabled=false
+    Config.AutoCollect.Enabled=false; Config.ExplosionEffect.Enabled=false; Config.TracerEffect.Enabled=false; Config.SoundSpam.Enabled=false
     disableRagebot()
     if Config.RakNet.Enabled then stopRakNet(); Config.RakNet.Enabled=false end
     stopWeaponTracker(); stopLoopExplosions(); stopTracers(); stopAnimation(); stopPulseDesync(); stopSoundSpam()
@@ -1744,16 +1614,12 @@ end)
 
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
-    if input.KeyCode == Config.Safety.EmergencyKey then
-        disableAll(); restorePos(); Library:Notify("Emergency stop", 3)
-    end
+    if input.KeyCode == Config.Safety.EmergencyKey then disableAll(); restorePos(); Library:Notify("Emergency stop", 3) end
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- UI
 -- ═══════════════════════════════════════════════════════════════════════
-
--- ─── OMEGABOT TAB ───────────────────────────────────────────────────────
 
 local OM_L  = Tabs.OmegaBot:AddLeftGroupbox("OmegaBot")
 local OM_T  = Tabs.OmegaBot:AddLeftGroupbox("Timing & Void")
@@ -1764,68 +1630,47 @@ local OM_PR = Tabs.OmegaBot:AddRightGroupbox("Prediction & Priority")
 local OM_I  = Tabs.OmegaBot:AddRightGroupbox("vs. Orbit Ragebot")
 
 OM_L:AddLabel("All-in-one: void + orbit + anti proj + melee + predict")
-OM_L:AddLabel("Beats 0.25/0.1 timing, 360 FOV aimbot, and orbit scripts")
-OM_L:AddToggle("OmegaEnabled", {
-    Text = "Enable OmegaBot", Default = false,
-    Callback = function(v)
-        if v then enableOmegaBot() else disableOmegaBot() end
-    end,
-})
-OM_L:AddSlider("OmegaShots",    { Text = "Shoot Attempts",     Default = 3,    Min = 1,  Max = 10,  Rounding = 0, Callback = function(v) Config.OmegaBot.ShootAttempts = v end })
-OM_L:AddSlider("OmegaInterval", { Text = "Shot Interval (ms)", Default = 10,   Min = 1,  Max = 100, Rounding = 0, Callback = function(v) Config.OmegaBot.ShootInterval  = v/1000 end })
-OM_L:AddToggle("OmegaMultiThread", { Text = "Multi-Thread Shooting",   Default = true,  Callback = function(v) Config.OmegaBot.MultiThread = v end })
-OM_L:AddToggle("OmegaAllEnemies",  { Text = "Hit ALL Enemies at Once", Default = true,  Callback = function(v) Config.OmegaBot.AllEnemies  = v end })
-OM_L:AddToggle("OmegaTeamCheck",   { Text = "Team Check",              Default = true,  Callback = function(v) Config.OmegaBot.TeamCheck   = v end })
-OM_L:AddToggle("OmegaPersist",     { Text = "Persist Across Rounds",   Default = true,  Callback = function(v) Config.OmegaBot.PersistAcrossRounds = v end })
-OM_L:AddButton({ Text = "Force Stop OmegaBot", Func = function() disableOmegaBot(); Library:Notify("OmegaBot stopped", 2) end })
+OM_L:AddToggle("OmegaEnabled", { Text = "Enable OmegaBot", Default = false, Callback = function(v) if v then enableOmegaBot() else disableOmegaBot() end end })
+OM_L:AddSlider("OmegaShots",      { Text = "Shoot Attempts",     Default = 3,  Min = 1, Max = 10,  Rounding = 0, Callback = function(v) Config.OmegaBot.ShootAttempts = v end })
+OM_L:AddSlider("OmegaInterval",   { Text = "Shot Interval (ms)", Default = 10, Min = 1, Max = 100, Rounding = 0, Callback = function(v) Config.OmegaBot.ShootInterval  = v/1000 end })
+OM_L:AddToggle("OmegaMultiThread",{ Text = "Multi-Thread Shooting",   Default = true,  Callback = function(v) Config.OmegaBot.MultiThread = v end })
+OM_L:AddToggle("OmegaAllEnemies", { Text = "Hit ALL Enemies at Once", Default = true,  Callback = function(v) Config.OmegaBot.AllEnemies  = v end })
+OM_L:AddToggle("OmegaTeamCheck",  { Text = "Team Check",              Default = true,  Callback = function(v) Config.OmegaBot.TeamCheck   = v end })
+OM_L:AddToggle("OmegaPersist",    { Text = "Persist Across Rounds",   Default = true,  Callback = function(v) Config.OmegaBot.PersistAcrossRounds = v end })
+OM_L:AddButton({ Text = "Force Stop OmegaBot", Func = function() disableOmegaBot(); Library:Notify("Stopped", 2) end })
 
-OM_T:AddLabel("Their timing: hide 0.25s, attack 0.1s")
-OM_T:AddLabel("Ours: hide 0.08s, attack 0.05s (3x faster)")
-OM_T:AddSlider("OmegaHide",   { Text = "Hide Time (ms)",   Default = 80,    Min = 20, Max = 500,    Rounding = 0, Callback = function(v) Config.OmegaBot.HideTime     = v/1000 end })
-OM_T:AddSlider("OmegaAttack", { Text = "Attack Time (ms)", Default = 50,    Min = 10, Max = 500,    Rounding = 0, Callback = function(v) Config.OmegaBot.AttackTime   = v/1000 end })
-OM_T:AddSlider("OmegaAlt",    { Text = "Void Altitude",    Default = 250000, Min = 50000, Max = 500000, Rounding = 0, Callback = function(v) Config.OmegaBot.VoidAltitude = v end })
-OM_T:AddToggle("OmegaDynHide", { Text = "Dynamic Hide (closer = faster)", Default = true, Callback = function(v) Config.OmegaBot.DynamicHide = v end })
-OM_T:AddSlider("OmegaDynMin",  { Text = "Dynamic Hide Min (ms)", Default = 40, Min = 10, Max = 200, Rounding = 0, Callback = function(v) Config.OmegaBot.DynamicHideMin = v/1000 end })
+OM_T:AddLabel("Their timing: hide 0.25s / attack 0.1s")
+OM_T:AddLabel("Ours default: hide 0.08s / attack 0.05s")
+OM_T:AddSlider("OmegaHide",    { Text = "Hide Time (ms)",              Default = 80,     Min = 20,    Max = 500,    Rounding = 0, Callback = function(v) Config.OmegaBot.HideTime      = v/1000 end })
+OM_T:AddSlider("OmegaAttack",  { Text = "Attack Time (ms)",            Default = 50,     Min = 10,    Max = 500,    Rounding = 0, Callback = function(v) Config.OmegaBot.AttackTime    = v/1000 end })
+OM_T:AddSlider("OmegaAlt",     { Text = "Void Altitude",               Default = 250000, Min = 50000, Max = 500000, Rounding = 0, Callback = function(v) Config.OmegaBot.VoidAltitude  = v end })
+OM_T:AddToggle("OmegaDynHide", { Text = "Dynamic Hide (closer=faster)", Default = true,  Callback = function(v) Config.OmegaBot.DynamicHide = v end })
+OM_T:AddSlider("OmegaDynMin",  { Text = "Dynamic Hide Min (ms)",       Default = 40,     Min = 10,    Max = 200,    Rounding = 0, Callback = function(v) Config.OmegaBot.DynamicHideMin = v/1000 end })
 
-OM_A:AddLabel("Pulls all enemies into orbit around you client-side")
-OM_A:AddLabel("Puts them all in firetouchinterest range instantly")
-OM_A:AddToggle("OmegaOrbitAura",  { Text = "Orbit Aura",   Default = true,  Callback = function(v) Config.OmegaBot.OrbitAura  = v end })
-OM_A:AddSlider("OmegaOrbitR",     { Text = "Orbit Radius", Default = 8,   Min = 1, Max = 30, Rounding = 0, Callback = function(v) Config.OmegaBot.OrbitRadius = v end })
-OM_A:AddSlider("OmegaOrbitS",     { Text = "Orbit Speed",  Default = 6,   Min = 1, Max = 30, Rounding = 0, Callback = function(v) Config.OmegaBot.OrbitSpeed  = v end })
+OM_A:AddLabel("Pulls all enemies to orbit around you client-side")
+OM_A:AddToggle("OmegaOrbitAura", { Text = "Orbit Aura",   Default = true, Callback = function(v) Config.OmegaBot.OrbitAura  = v end })
+OM_A:AddSlider("OmegaOrbitR",    { Text = "Orbit Radius", Default = 8,  Min = 1, Max = 30, Rounding = 0, Callback = function(v) Config.OmegaBot.OrbitRadius = v end })
+OM_A:AddSlider("OmegaOrbitS",    { Text = "Orbit Speed",  Default = 6,  Min = 1, Max = 30, Rounding = 0, Callback = function(v) Config.OmegaBot.OrbitSpeed  = v end })
 
-OM_AP:AddLabel("Detects enemy CoreProjectiles near you")
-OM_AP:AddLabel("Sends them to altitude 999999 instantly")
-OM_AP:AddToggle("OmegaAntiProj",    { Text = "Anti Projectile",           Default = true,  Callback = function(v) Config.OmegaBot.AntiProjectile = v; if v then startAntiProjectile() end end })
-OM_AP:AddSlider("OmegaAntiProjR",   { Text = "Detection Radius (studs)",  Default = 60,  Min = 10, Max = 200, Rounding = 0, Callback = function(v) Config.OmegaBot.AntiProjRadius   = v end })
-OM_AP:AddSlider("OmegaAntiProjAlt", { Text = "Deflect Altitude",          Default = 999999, Min = 100000, Max = 1000000, Rounding = 0, Callback = function(v) Config.OmegaBot.AntiProjAltitude = v end })
+OM_AP:AddLabel("Detects enemy projectiles by proximity")
+OM_AP:AddLabel("Sends them to void altitude instantly")
+OM_AP:AddToggle("OmegaAntiProj",    { Text = "Anti Projectile",          Default = true, Callback = function(v) Config.OmegaBot.AntiProjectile = v; if v then startAntiProjectile() end end })
+OM_AP:AddSlider("OmegaAntiProjR",   { Text = "Detection Radius (studs)", Default = 60,     Min = 10,     Max = 200,     Rounding = 0, Callback = function(v) Config.OmegaBot.AntiProjRadius   = v end })
+OM_AP:AddSlider("OmegaAntiProjAlt", { Text = "Deflect Altitude",         Default = 999999, Min = 100000, Max = 1000000, Rounding = 0, Callback = function(v) Config.OmegaBot.AntiProjAltitude = v end })
 
 OM_MS:AddLabel("Detects enemy melee swing via tool.Activated")
-OM_MS:AddLabel("Fires projectile TP during the melee window")
-OM_MS:AddToggle("OmegaStrikeOnMelee", { Text = "Strike On Melee", Default = true, Callback = function(v) Config.OmegaBot.StrikeOnMelee = v end })
-OM_MS:AddSlider("OmegaMeleeWindow",   { Text = "Melee Window (ms)", Default = 300, Min = 50, Max = 1000, Rounding = 0, Callback = function(v) Config.OmegaBot.MeleeWindow = v/1000 end })
+OM_MS:AddLabel("Fires projectile TP for the full melee window")
+OM_MS:AddToggle("OmegaMelee",      { Text = "Strike On Melee",   Default = true, Callback = function(v) Config.OmegaBot.StrikeOnMelee = v end })
+OM_MS:AddSlider("OmegaMeleeWin",   { Text = "Melee Window (ms)", Default = 300, Min = 50, Max = 1000, Rounding = 0, Callback = function(v) Config.OmegaBot.MeleeWindow = v/1000 end })
 
-OM_PR:AddToggle("OmegaPrediction",  { Text = "Position Prediction",  Default = true, Callback = function(v) Config.OmegaBot.Prediction = v end })
-OM_PR:AddSlider("OmegaPredSteps",   { Text = "Prediction Steps",     Default = 5,  Min = 1, Max = 20, Rounding = 0, Callback = function(v) Config.OmegaBot.PredictSteps = v end })
-OM_PR:AddDropdown("OmegaPriority",  { Text = "Target Priority", Default = "Closest", Values = {"Closest","Furthest","Random","Lowest HP","Highest HP"}, Callback = function(v) Config.OmegaBot.Priority = v end })
+OM_PR:AddToggle("OmegaPredict",  { Text = "Position Prediction", Default = true, Callback = function(v) Config.OmegaBot.Prediction = v end })
+OM_PR:AddSlider("OmegaPredSteps",{ Text = "Prediction Steps",    Default = 5, Min = 1, Max = 20, Rounding = 0, Callback = function(v) Config.OmegaBot.PredictSteps = v end })
+OM_PR:AddDropdown("OmegaPrio",   { Text = "Priority", Default = "Closest", Values = {"Closest","Furthest","Random","Lowest HP","Highest HP"}, Callback = function(v) Config.OmegaBot.Priority = v end })
 
-OM_I:AddLabel("What theirs does:")
-OM_I:AddLabel("  0.25s hide, 0.1s attack")
-OM_I:AddLabel("  360 FOV aimbot (1 target)")
-OM_I:AddLabel("  1 shoot attempt")
-OM_I:AddLabel("  0.4s shot interval")
-OM_I:AddLabel("  orbit 1 enemy at a time")
-OM_I:AddLabel("")
-OM_I:AddLabel("What ours does:")
-OM_I:AddLabel("  0.08s hide, 0.05s attack")
-OM_I:AddLabel("  ALL enemies simultaneously")
-OM_I:AddLabel("  3+ shoot attempts each")
-OM_I:AddLabel("  0.01s shot interval")
-OM_I:AddLabel("  orbit ALL enemies at once")
-OM_I:AddLabel("  deflects their projectiles")
-OM_I:AddLabel("  fires on melee swing")
-OM_I:AddLabel("  predicts target movement")
-
--- ─── AIMBOT TAB ─────────────────────────────────────────────────────────
+OM_I:AddLabel("Their script:"); OM_I:AddLabel("  hide 0.25s / attack 0.1s"); OM_I:AddLabel("  1 attempt / 0.4s interval")
+OM_I:AddLabel("  orbit 1 enemy / 360 FOV"); OM_I:AddLabel("")
+OM_I:AddLabel("OmegaBot:"); OM_I:AddLabel("  hide 0.08s / attack 0.05s"); OM_I:AddLabel("  3 attempts / 0.01s interval")
+OM_I:AddLabel("  orbit ALL enemies"); OM_I:AddLabel("  deflects projectiles"); OM_I:AddLabel("  fires on melee swing"); OM_I:AddLabel("  position prediction")
 
 local AB_L = Tabs.Aimbot:AddLeftGroupbox("Aimbot")
 local AB_D = Tabs.Aimbot:AddLeftGroupbox("Track Dummy")
@@ -1834,13 +1679,13 @@ local AB_R = Tabs.Aimbot:AddRightGroupbox("Filters")
 
 AB_L:AddLabel("CameraController: " .. (CameraController and "Connected ✓" or "Not Found ✗"))
 AB_L:AddToggle("AimbotEnabled", { Text = "Enable Aimbot", Default = false, Callback = function(v) Config.Aimbot.Enabled = v; if not v then lockedTarget=nil; lockTimer=0; resetDelayed(); if fovCircle then fovCircle.Visible=false end end end })
-AB_L:AddSlider("AimbotSmooth",   { Text = "Smoothness",      Default = 10,  Min = 1,  Max = 100, Rounding = 0, Callback = function(v) Config.Aimbot.Smoothness  = v end })
-AB_L:AddSlider("AimbotReaction", { Text = "Reaction (ms)",   Default = 100, Min = 0,  Max = 500, Rounding = 0, Callback = function(v) Config.Aimbot.ReactionTime = v end })
-AB_L:AddSlider("AimbotForgot",   { Text = "Forgot Time (s)", Default = 3,   Min = 1,  Max = 15,  Rounding = 0, Callback = function(v) Config.Aimbot.ForgotTime   = v end })
+AB_L:AddSlider("AimbotSmooth",   { Text = "Smoothness",      Default = 10,  Min = 1, Max = 100, Rounding = 0, Callback = function(v) Config.Aimbot.Smoothness  = v end })
+AB_L:AddSlider("AimbotReaction", { Text = "Reaction (ms)",   Default = 100, Min = 0, Max = 500, Rounding = 0, Callback = function(v) Config.Aimbot.ReactionTime = v end })
+AB_L:AddSlider("AimbotForgot",   { Text = "Forgot Time (s)", Default = 3,   Min = 1, Max = 15,  Rounding = 0, Callback = function(v) Config.Aimbot.ForgotTime   = v end })
 AB_L:AddDropdown("AimbotPart",   { Text = "Target Part", Default = "Head", Values = TARGET_OPTIONS, Callback = function(v) Config.Aimbot.TargetPart = v end })
 
 AB_D:AddLabel("Locks onto ShootingRangeEntities dummy only")
-AB_D:AddLabel("Won't lock the red Target model")
+AB_D:AddLabel("Will not lock the red Target model")
 AB_D:AddToggle("TrackDummyEnabled", { Text = "Enable Track Dummy", Default = false, Callback = function(v) Config.TrackDummy.Enabled = v; if v then Library:Notify("Track Dummy on — index " .. Config.TrackDummy.DummyIndex, 2) end end })
 AB_D:AddDropdown("DummyPreset", { Text = "Dummy Target", Default = "Index 99 (Dummy 1)", Values = {"Index 99 (Dummy 1)","Index 40 (Dummy 2)","Custom"}, Callback = function(v) if v=="Index 99 (Dummy 1)" then Config.TrackDummy.DummyIndex=99 elseif v=="Index 40 (Dummy 2)" then Config.TrackDummy.DummyIndex=40 end end })
 AB_D:AddSlider("DummyIdx", { Text = "Custom Index", Default = 99, Min = 1, Max = 200, Rounding = 0, Callback = function(v) Config.TrackDummy.DummyIndex = v end })
@@ -1851,20 +1696,18 @@ AB_D:AddButton({ Text = "Snap to Dummy Now", Func = function()
     Library:Notify("Snapped to dummy " .. Config.TrackDummy.DummyIndex, 2)
 end })
 
-AB_F:AddSlider("AimbotFOV",      { Text = "Max FOV",    Default = 150,  Min = 0, Max = 600, Rounding = 0, Callback = function(v) Config.Aimbot.MaxFOV = v end })
-AB_F:AddToggle("AimbotDrawFOV",  { Text = "Draw FOV",   Default = false, Callback = function(v) Config.Aimbot.DrawFOV = v end })
+AB_F:AddSlider("AimbotFOV",     { Text = "Max FOV",    Default = 150, Min = 0, Max = 600, Rounding = 0, Callback = function(v) Config.Aimbot.MaxFOV = v end })
+AB_F:AddToggle("AimbotDrawFOV", { Text = "Draw FOV",   Default = false, Callback = function(v) Config.Aimbot.DrawFOV = v end })
 AB_F:AddDropdown("AimbotFOVStyle",{ Text = "FOV Style", Default = "Half", Values = {"Half","Filled","Invisible"}, Callback = function(v) Config.Aimbot.FOVStyle = v end })
-AB_F:AddToggle("AimbotDynFOV",   { Text = "Dynamic FOV", Default = false, Callback = function(v) Config.Aimbot.DynamicFOV = v end })
+AB_F:AddToggle("AimbotDynFOV",  { Text = "Dynamic FOV", Default = false, Callback = function(v) Config.Aimbot.DynamicFOV = v end })
 AB_F:AddLabel(""); AB_F:AddLabel("Position delay — 0=instant 100=max")
-AB_F:AddSlider("AimbotXS",    { Text = "X Smooth",    Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(v) Config.Aimbot.XSmooth    = v/100 end })
-AB_F:AddSlider("AimbotYS",    { Text = "Y Smooth",    Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(v) Config.Aimbot.YSmooth    = v/100 end })
-AB_F:AddSlider("AimbotJS",    { Text = "Jump Smooth", Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(v) Config.Aimbot.JumpSmooth = v/100 end })
+AB_F:AddSlider("AimbotXS",  { Text = "X Smooth",    Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(v) Config.Aimbot.XSmooth    = v/100 end })
+AB_F:AddSlider("AimbotYS",  { Text = "Y Smooth",    Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(v) Config.Aimbot.YSmooth    = v/100 end })
+AB_F:AddSlider("AimbotJS",  { Text = "Jump Smooth", Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(v) Config.Aimbot.JumpSmooth = v/100 end })
 
 AB_R:AddToggle("AimbotTeam", { Text = "Team Check",    Default = false, Callback = function(v) Config.Aimbot.TeamCheck    = v end })
 AB_R:AddToggle("AimbotVis",  { Text = "Visible Check", Default = false, Callback = function(v) Config.Aimbot.VisibleCheck = v end })
 AB_R:AddButton({ Text = "Reset Lock", Func = function() lockedTarget=nil; lockTimer=0; resetDelayed(); Library:Notify("Lock reset", 2) end })
-
--- ─── VOID SPAM TAB ──────────────────────────────────────────────────────
 
 local VS_L  = Tabs.VoidSpam:AddLeftGroupbox("Void System")
 local VS_PD = Tabs.VoidSpam:AddLeftGroupbox("Pure Desync")
@@ -1880,24 +1723,21 @@ VS_L:AddSlider("VoidIntensity", { Text = "Intensity %", Default = 100,   Min = 1
 VS_PD:AddLabel("Full range desync, no intensity cap")
 VS_PD:AddToggle("PureDesyncEnabled", { Text = "Enable Pure Desync", Default = false, Callback = function(v) Config.PureDesync.Enabled = v end })
 
-VS_PU:AddLabel("Alternates void/real on timer — use with Proj TP")
+VS_PU:AddLabel("Alternates void/real on a timer — use with Proj TP")
 VS_PU:AddToggle("PulseEnabled", { Text = "Enable Pulse Desync", Default = false, Callback = function(v) Config.PulseDesync.Enabled = v; if v then startPulseDesync() else stopPulseDesync() end end })
 VS_PU:AddSlider("PulseHide",    { Text = "Hide Time (ms)",   Default = 250,    Min = 50,    Max = 2000,   Rounding = 0, Callback = function(v) Config.PulseDesync.HideTime    = v/1000 end })
 VS_PU:AddSlider("PulseAttack",  { Text = "Attack Time (ms)", Default = 100,    Min = 10,    Max = 1000,   Rounding = 0, Callback = function(v) Config.PulseDesync.AttackTime  = v/1000 end })
 VS_PU:AddSlider("PulseAlt",     { Text = "Void Altitude",    Default = 150000, Min = 10000, Max = 500000, Rounding = 0, Callback = function(v) Config.PulseDesync.VoidAltitude = v end })
 
 VS_WT:AddLabel("Watches tool.Activated + projectile proximity")
-VS_WT:AddLabel("No hardcoded remotes — survives game updates")
+VS_WT:AddLabel("No hardcoded remotes")
 VS_WT:AddToggle("WTEnabled", { Text = "Enable Weapon Tracker", Default = false, Callback = function(v) Config.WeaponTracker.Enabled = v; if v then startWeaponTracker() else stopWeaponTracker() end end })
-VS_WT:AddSlider("WTAlt",    { Text = "Boost Altitude",      Default = 200000, Min = 100000, Max = 500000, Rounding = 0, Callback = function(v) Config.WeaponTracker.VoidAltitude  = v end })
-VS_WT:AddSlider("WTDelay",  { Text = "Teleport Delay (ms)", Default = 100,    Min = 0,      Max = 1000,   Rounding = 0, Callback = function(v) Config.WeaponTracker.TeleportDelay = v/1000 end })
-VS_WT:AddToggle("WTTeam",   { Text = "Team Check", Default = true, Callback = function(v) Config.WeaponTracker.TeamCheck = v end })
+VS_WT:AddSlider("WTAlt",     { Text = "Boost Altitude",      Default = 200000, Min = 100000, Max = 500000, Rounding = 0, Callback = function(v) Config.WeaponTracker.VoidAltitude  = v end })
+VS_WT:AddSlider("WTDelay",   { Text = "Teleport Delay (ms)", Default = 100,    Min = 0,      Max = 1000,   Rounding = 0, Callback = function(v) Config.WeaponTracker.TeleportDelay = v/1000 end })
+VS_WT:AddToggle("WTTeam",    { Text = "Team Check", Default = true, Callback = function(v) Config.WeaponTracker.TeamCheck = v end })
 
-VS_R:AddLabel("Server: sees random/extreme position"); VS_R:AddLabel("Client: sees real position")
+VS_R:AddLabel("Server: random/extreme position"); VS_R:AddLabel("Client: real position")
 VS_R:AddLabel("Heartbeat  → fake pos to server"); VS_R:AddLabel("RenderStep → real pos restored")
-VS_R:AddLabel(""); VS_R:AddLabel("Pulse + ProjTP: best combo"); VS_R:AddLabel("Hide = server loses you"); VS_R:AddLabel("Attack = safe to shoot")
-
--- ─── PROJECTILE TP TAB ──────────────────────────────────────────────────
 
 local PT_L  = Tabs.ProjectileTP:AddLeftGroupbox("Projectile Teleport")
 local PT_M  = Tabs.ProjectileTP:AddLeftGroupbox("Targeting")
@@ -1907,92 +1747,66 @@ local PT_MM = Tabs.ProjectileTP:AddRightGroupbox("Projectile Mimic")
 PT_L:AddToggle("ProjEnabled",    { Text = "Enable Projectile TP", Default = false, Callback = function(v) Config.ProjectileTP.Enabled   = v end })
 PT_L:AddToggle("ProjAutoShoot",  { Text = "Auto Shoot",           Default = false, Callback = function(v) Config.ProjectileTP.AutoShoot = v end })
 PT_L:AddDropdown("ProjHitbox",   { Text = "Target Hitbox", Default = "HitBoxHeadSmall", Values = {"HitBoxHeadSmall","HitBoxHead","Head","HumanoidRootPart"}, Callback = function(v) Config.ProjectileTP.TargetPart = v end })
-PT_L:AddSlider("ProjDelay",      { Text = "Loop Delay (ms)",    Default = 10, Min = 1,  Max = 100, Rounding = 0, Callback = function(v) Config.ProjectileTP.LoopDelay     = v/1000 end })
+PT_L:AddSlider("ProjDelay",      { Text = "Loop Delay (ms)",    Default = 10, Min = 1, Max = 100, Rounding = 0, Callback = function(v) Config.ProjectileTP.LoopDelay     = v/1000 end })
 PT_L:AddToggle("ProjCache",      { Text = "Cache Projectiles",   Default = true, Callback = function(v) Config.ProjectileTP.Cache        = v end })
-PT_L:AddSlider("ProjAttempts",   { Text = "Shoot Attempts",      Default = 1,  Min = 1,  Max = 10,  Rounding = 0, Callback = function(v) Config.ProjectileTP.ShootAttempts = v end })
-PT_L:AddSlider("ProjHitboxSize", { Text = "Hitbox Size (studs)", Default = 5,  Min = 1,  Max = 50,  Rounding = 0, Callback = function(v) Config.ProjectileTP.HitboxSize    = v end })
+PT_L:AddSlider("ProjAttempts",   { Text = "Shoot Attempts",      Default = 1,  Min = 1, Max = 10,  Rounding = 0, Callback = function(v) Config.ProjectileTP.ShootAttempts = v end })
+PT_L:AddSlider("ProjHitboxSize", { Text = "Hitbox Size (studs)", Default = 5,  Min = 1, Max = 50,  Rounding = 0, Callback = function(v) Config.ProjectileTP.HitboxSize    = v end })
 
 PT_M:AddDropdown("ProjPriority", { Text = "Priority",      Default = "Closest", Values = {"Closest","Furthest","Random","Lowest HP","Highest HP"}, Callback = function(v) Config.ProjectileTP.Priority    = v end })
 PT_M:AddToggle("ProjTeamCheck",  { Text = "Team Check",    Default = true,  Callback = function(v) Config.ProjectileTP.TeamCheck   = v end })
 PT_M:AddToggle("ProjVisCheck",   { Text = "Visible Check", Default = false, Callback = function(v) Config.ProjectileTP.VisCheck    = v end })
 PT_M:AddSlider("ProjMaxDist",    { Text = "Max Distance",  Default = 999,   Min = 10, Max = 999, Rounding = 0, Callback = function(v) Config.ProjectileTP.MaxDistance = v end })
 
--- Anti Projectile (standalone)
-PT_AP:AddLabel("Standalone anti projectile")
-PT_AP:AddLabel("OmegaBot has its own built-in version")
-PT_AP:AddLabel("Use this if OmegaBot is off")
-PT_AP:AddToggle("AntiProjEnabled", {
-    Text = "Enable Anti Projectile", Default = false,
-    Callback = function(v)
-        Config.AntiProjectile.Enabled = v
-        if v then startAntiProjectile(); Library:Notify("Anti Projectile enabled", 2)
-        else stopAntiProjectile() end
-    end,
-})
-PT_AP:AddSlider("AntiProjRadius",  { Text = "Detection Radius", Default = 60,     Min = 10,     Max = 200,     Rounding = 0, Callback = function(v) Config.AntiProjectile.Radius       = v end })
-PT_AP:AddSlider("AntiProjAlt",     { Text = "Deflect Altitude", Default = 999999, Min = 100000, Max = 1000000, Rounding = 0, Callback = function(v) Config.AntiProjectile.VoidAltitude = v end })
-PT_AP:AddToggle("AntiProjVoid",    { Text = "Send to Void",     Default = true,   Callback = function(v) Config.AntiProjectile.RedirectToVoid  = v end })
-PT_AP:AddToggle("AntiProjSelf",    { Text = "Teleport Under Me (fun)", Default = false, Callback = function(v) Config.AntiProjectile.RedirectToSelf  = v end })
-PT_AP:AddToggle("AntiProjLog",     { Text = "Log Deflects",     Default = false,  Callback = function(v) Config.AntiProjectile.LogDeflects = v end })
-PT_AP:AddLabel("Deflected this session: ")
-PT_AP:AddButton({ Text = "Reset Counter", Func = function() omegaDeflectCount = 0; Library:Notify("Counter reset", 2) end })
+PT_AP:AddLabel("Standalone — use if OmegaBot is off")
+PT_AP:AddToggle("AntiProjEnabled",  { Text = "Enable Anti Projectile", Default = false, Callback = function(v) Config.AntiProjectile.Enabled = v; if v then startAntiProjectile(); Library:Notify("Anti Projectile on", 2) else stopAntiProjectile() end end })
+PT_AP:AddSlider("AntiProjRadius",   { Text = "Detection Radius", Default = 60,     Min = 10,     Max = 200,     Rounding = 0, Callback = function(v) Config.AntiProjectile.Radius       = v end })
+PT_AP:AddSlider("AntiProjAlt",      { Text = "Deflect Altitude", Default = 999999, Min = 100000, Max = 1000000, Rounding = 0, Callback = function(v) Config.AntiProjectile.VoidAltitude = v end })
+PT_AP:AddToggle("AntiProjToVoid",   { Text = "Send to Void",          Default = true,  Callback = function(v) Config.AntiProjectile.RedirectToVoid = v end })
+PT_AP:AddToggle("AntiProjToSelf",   { Text = "Teleport Under Me",     Default = false, Callback = function(v) Config.AntiProjectile.RedirectToSelf = v end })
+PT_AP:AddToggle("AntiProjLog",      { Text = "Log Deflects",          Default = false, Callback = function(v) Config.AntiProjectile.LogDeflects    = v end })
+PT_AP:AddButton({ Text = "Reset Deflect Counter", Func = function() omegaDeflectCount = 0; Library:Notify("Counter reset", 2) end })
 
--- Projectile Mimic
-PT_MM:AddLabel("Turns their projectiles against them")
-PT_MM:AddLabel("Detects enemy CoreProjectile spawn")
-PT_MM:AddLabel("Fires firetouchinterest on shooter from their own proj")
-PT_MM:AddLabel("No need to shoot first")
-PT_MM:AddToggle("MimicEnabled", {
-    Text = "Enable Projectile Mimic", Default = false,
-    Callback = function(v)
-        Config.ProjectileMimic.Enabled = v
-        if v then startProjectileMimic(); Library:Notify("Projectile Mimic enabled", 2)
-        else stopProjectileMimic() end
-    end,
-})
+PT_MM:AddLabel("Uses enemy's own projectile against them")
+PT_MM:AddLabel("Fires firetouchinterest from their proj onto them")
+PT_MM:AddLabel("No need for you to shoot first")
+PT_MM:AddToggle("MimicEnabled",    { Text = "Enable Projectile Mimic",          Default = false, Callback = function(v) Config.ProjectileMimic.Enabled = v; if v then startProjectileMimic(); Library:Notify("Projectile Mimic on", 2) else stopProjectileMimic() end end })
 PT_MM:AddToggle("MimicHitShooter", { Text = "Hit Shooter (their proj hits them)", Default = true,  Callback = function(v) Config.ProjectileMimic.HitShooter = v end })
 PT_MM:AddToggle("MimicHitSelf",    { Text = "Hit Self Too (testing)",             Default = false, Callback = function(v) Config.ProjectileMimic.HitSelf    = v end })
 PT_MM:AddDropdown("MimicHitbox",   { Text = "Target Hitbox", Default = "HitBoxHeadSmall", Values = {"HitBoxHeadSmall","HitBoxHead","Head","HumanoidRootPart"}, Callback = function(v) Config.ProjectileMimic.HitboxPart = v end })
-PT_MM:AddSlider("MimicDelay",      { Text = "Mimic Delay (ms)",   Default = 0,  Min = 0, Max = 500, Rounding = 0, Callback = function(v) Config.ProjectileMimic.MimicDelay = v end })
-PT_MM:AddSlider("MimicAttempts",   { Text = "Fire Attempts",       Default = 2,  Min = 1, Max = 10,  Rounding = 0, Callback = function(v) Config.ProjectileMimic.Attempts   = v end })
-PT_MM:AddToggle("MimicTeamCheck",  { Text = "Team Check",          Default = true, Callback = function(v) Config.ProjectileMimic.TeamCheck = v end })
-PT_MM:AddToggle("MimicLog",        { Text = "Log Mimics",          Default = false, Callback = function(v) Config.ProjectileMimic.LogMimics = v end })
+PT_MM:AddSlider("MimicDelay",      { Text = "Mimic Delay (ms)", Default = 0, Min = 0, Max = 500, Rounding = 0, Callback = function(v) Config.ProjectileMimic.MimicDelay = v end })
+PT_MM:AddSlider("MimicAttempts",   { Text = "Fire Attempts",    Default = 2, Min = 1, Max = 10,  Rounding = 0, Callback = function(v) Config.ProjectileMimic.Attempts   = v end })
+PT_MM:AddToggle("MimicTeamCheck",  { Text = "Team Check",       Default = true, Callback = function(v) Config.ProjectileMimic.TeamCheck = v end })
+PT_MM:AddToggle("MimicLog",        { Text = "Log Mimics",       Default = false, Callback = function(v) Config.ProjectileMimic.LogMimics = v end })
 PT_MM:AddButton({ Text = "Reset Mimic Counter", Func = function() omegaMimicCount = 0; Library:Notify("Counter reset", 2) end })
-
--- ─── RAGEBOT TAB ────────────────────────────────────────────────────────
 
 local RB_L = Tabs.Ragebot:AddLeftGroupbox("Ragebot")
 local RB_T = Tabs.Ragebot:AddLeftGroupbox("Timing")
 local RB_R = Tabs.Ragebot:AddRightGroupbox("Priority & Persistence")
 
-RB_L:AddToggle("RBEnabled",    { Text = "Enabled",              Default = false, Callback = function(v) if v then enableRagebot() else disableRagebot() end end })
-RB_L:AddToggle("RBVoidSync",   { Text = "Void Spam Sync",       Default = true,  Callback = function(v) Config.Ragebot.VoidSpamSync = v end })
-RB_L:AddToggle("RBClientTP",   { Text = "Client-Side Enemy TP", Default = true,  Callback = function(v) Config.Ragebot.ClientTP     = v end })
-RB_L:AddSlider("RBOrbitR",     { Text = "Orbit Radius", Default = 5,  Min = 1, Max = 50, Rounding = 0, Callback = function(v) Config.Ragebot.OrbitRadius = v end })
-RB_L:AddSlider("RBOrbitS",     { Text = "Orbit Speed",  Default = 10, Min = 1, Max = 50, Rounding = 0, Callback = function(v) Config.Ragebot.OrbitSpeed  = v end })
+RB_L:AddToggle("RBEnabled",  { Text = "Enabled",              Default = false, Callback = function(v) if v then enableRagebot() else disableRagebot() end end })
+RB_L:AddToggle("RBVoidSync", { Text = "Void Spam Sync",       Default = true,  Callback = function(v) Config.Ragebot.VoidSpamSync = v end })
+RB_L:AddToggle("RBClientTP", { Text = "Client-Side Enemy TP", Default = true,  Callback = function(v) Config.Ragebot.ClientTP     = v end })
+RB_L:AddSlider("RBOrbitR",   { Text = "Orbit Radius", Default = 5,  Min = 1, Max = 50, Rounding = 0, Callback = function(v) Config.Ragebot.OrbitRadius = v end })
+RB_L:AddSlider("RBOrbitS",   { Text = "Orbit Speed",  Default = 10, Min = 1, Max = 50, Rounding = 0, Callback = function(v) Config.Ragebot.OrbitSpeed  = v end })
 
-RB_T:AddSlider("RBHide",       { Text = "Hide Time (ms)",   Default = 250, Min = 50, Max = 2000, Rounding = 0, Callback = function(v) Config.Ragebot.HideTime   = v/1000; if Config.Ragebot.VoidSpamSync then Config.PulseDesync.HideTime   = v/1000 end end })
-RB_T:AddSlider("RBAttack",     { Text = "Attack Time (ms)", Default = 100, Min = 10, Max = 1000, Rounding = 0, Callback = function(v) Config.Ragebot.AttackTime = v/1000; if Config.Ragebot.VoidSpamSync then Config.PulseDesync.AttackTime = v/1000 end end })
-RB_T:AddSlider("RBShots",      { Text = "Shoot Attempts",   Default = 1,   Min = 1,  Max = 10,   Rounding = 0, Callback = function(v) Config.Ragebot.ShootAttempts = v; Config.ProjectileTP.ShootAttempts = v end })
+RB_T:AddSlider("RBHide",   { Text = "Hide Time (ms)",   Default = 250, Min = 50, Max = 2000, Rounding = 0, Callback = function(v) Config.Ragebot.HideTime   = v/1000; if Config.Ragebot.VoidSpamSync then Config.PulseDesync.HideTime   = v/1000 end end })
+RB_T:AddSlider("RBAttack", { Text = "Attack Time (ms)", Default = 100, Min = 10, Max = 1000, Rounding = 0, Callback = function(v) Config.Ragebot.AttackTime = v/1000; if Config.Ragebot.VoidSpamSync then Config.PulseDesync.AttackTime = v/1000 end end })
+RB_T:AddSlider("RBShots",  { Text = "Shoot Attempts",   Default = 1,   Min = 1,  Max = 10,   Rounding = 0, Callback = function(v) Config.Ragebot.ShootAttempts = v; Config.ProjectileTP.ShootAttempts = v end })
 
-RB_R:AddToggle("RBPersist",    { Text = "Persist Across Rounds", Default = true, Callback = function(v) Config.Ragebot.PersistAcrossRounds = v end })
-RB_R:AddDropdown("RBPriority", { Text = "Priority", Default = "Closest", Values = {"Closest","Furthest","Random","Lowest HP","Highest HP"}, Callback = function(v) Config.ProjectileTP.Priority = v end })
+RB_R:AddToggle("RBPersist",   { Text = "Persist Across Rounds", Default = true, Callback = function(v) Config.Ragebot.PersistAcrossRounds = v end })
+RB_R:AddDropdown("RBPriority",{ Text = "Priority", Default = "Closest", Values = {"Closest","Furthest","Random","Lowest HP","Highest HP"}, Callback = function(v) Config.ProjectileTP.Priority = v end })
 RB_R:AddButton({ Text = "Force Resume", Func = function() if not Config.Ragebot.Enabled then enableRagebot(); Library:Notify("Resumed", 2) else Library:Notify("Already running", 2) end end })
 RB_R:AddButton({ Text = "Force Stop",   Func = function() disableRagebot(); Library:Notify("Stopped", 2) end })
-
--- ─── WEAPONS TAB ────────────────────────────────────────────────────────
 
 local WP_L = Tabs.Weapons:AddLeftGroupbox("Reload Speed")
 local WP_R = Tabs.Weapons:AddRightGroupbox("Info")
 
-WP_L:AddLabel("Applies to: Bow, Daggers, Slingshot"); WP_L:AddLabel("Daggers min capped at 0.09s")
-WP_L:AddToggle("WPReloadEnabled", { Text = "Enable Reload Speed", Default = false, Callback = function(v) Config.Weapons.ReloadSpeedEnabled = v; applyReloadPatch() end })
-WP_L:AddSlider("WPReloadLen",     { Text = "Reload Length", Default = 0, Min = 0, Max = 5, Rounding = 2, Suffix = "s", Callback = function(v) Config.Weapons.ReloadLength = v; if Config.Weapons.ReloadSpeedEnabled then applyReloadPatch() end end })
+WP_L:AddLabel("Applies to: Bow, Daggers, Slingshot")
+WP_L:AddToggle("WPEnabled",  { Text = "Enable Reload Speed", Default = false, Callback = function(v) Config.Weapons.ReloadSpeedEnabled = v; applyReloadPatch() end })
+WP_L:AddSlider("WPReloadLen",{ Text = "Reload Length", Default = 0, Min = 0, Max = 5, Rounding = 2, Suffix = "s", Callback = function(v) Config.Weapons.ReloadLength = v; if Config.Weapons.ReloadSpeedEnabled then applyReloadPatch() end end })
 WP_L:AddButton({ Text = "Apply Now",         Func = function() applyReloadPatch(); Library:Notify("Applied", 2) end })
 WP_L:AddButton({ Text = "Restore Originals", Func = function() Config.Weapons.ReloadSpeedEnabled = false; applyReloadPatch(); Library:Notify("Restored", 2) end })
 WP_R:AddLabel("rawget/rawset bypasses ItemLibrary metamethods"); WP_R:AddLabel("0s = near-instant reload")
-
--- ─── EFFECTS TAB ────────────────────────────────────────────────────────
 
 local EF_L  = Tabs.Effects:AddLeftGroupbox("Explosion Effects")
 local EF_SS = Tabs.Effects:AddLeftGroupbox("Sound Spam")
@@ -2001,45 +1815,43 @@ local EF_A  = Tabs.Effects:AddRightGroupbox("Animation Spoof")
 local EF_MC = Tabs.Effects:AddRightGroupbox("Mobile Controller")
 
 EF_L:AddLabel("ExplosionEffect: " .. (ExplosionEffectFn and "✓" or "✗"))
-EF_L:AddToggle("EFEnabled",   { Text = "Enable",          Default = false, Callback = function(v) Config.ExplosionEffect.Enabled = v; if not v then stopLoopExplosions() end end })
-EF_L:AddToggle("EFOnDeath",   { Text = "On Enemy Death",  Default = true,  Callback = function(v) Config.ExplosionEffect.OnDeath = v end })
-EF_L:AddToggle("EFOnKill",    { Text = "On Kill",         Default = true,  Callback = function(v) Config.ExplosionEffect.OnKill  = v end })
-EF_L:AddToggle("EFOnHit",     { Text = "On Hit",          Default = false, Callback = function(v) Config.ExplosionEffect.OnHit   = v end })
-EF_L:AddSlider("EFSize",      { Text = "Size",            Default = 24, Min = 4,  Max = 100, Rounding = 0, Callback = function(v) Config.ExplosionEffect.Size         = v end })
-EF_L:AddSlider("EFVariance",  { Text = "Sound Variance %", Default = 20, Min = 0, Max = 100, Rounding = 0, Callback = function(v) Config.ExplosionEffect.SpeedVariance = v/100 end })
+EF_L:AddToggle("EFEnabled",   { Text = "Enable",           Default = false, Callback = function(v) Config.ExplosionEffect.Enabled = v; if not v then stopLoopExplosions() end end })
+EF_L:AddToggle("EFOnDeath",   { Text = "On Enemy Death",   Default = true,  Callback = function(v) Config.ExplosionEffect.OnDeath = v end })
+EF_L:AddToggle("EFOnKill",    { Text = "On Kill",          Default = true,  Callback = function(v) Config.ExplosionEffect.OnKill  = v end })
+EF_L:AddToggle("EFOnHit",     { Text = "On Hit",           Default = false, Callback = function(v) Config.ExplosionEffect.OnHit   = v end })
+EF_L:AddSlider("EFSize",      { Text = "Size",             Default = 24, Min = 4,  Max = 100, Rounding = 0, Callback = function(v) Config.ExplosionEffect.Size         = v end })
+EF_L:AddSlider("EFVariance",  { Text = "Sound Variance %", Default = 20, Min = 0,  Max = 100, Rounding = 0, Callback = function(v) Config.ExplosionEffect.SpeedVariance = v/100 end })
 EF_L:AddToggle("EFLoop",      { Text = "Loop Around Self", Default = false, Callback = function(v) Config.ExplosionEffect.LoopExplosions = v; if v and Config.ExplosionEffect.Enabled then startLoopExplosions() else stopLoopExplosions() end end })
 EF_L:AddButton({ Text = "Explode at My Position",   Func = function() local r = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart"); if r then triggerExplosion(r.Position) end end })
-EF_L:AddButton({ Text = "Explode at Closest Enemy", Func = function() local e = getClosestEnemy(); if e and e.Character then local r = e.Character:FindFirstChild("HumanoidRootPart"); if r then triggerExplosion(r.Position); Library:Notify("Exploded at " .. e.Name, 2) end else Library:Notify("No enemy", 2) end end })
+EF_L:AddButton({ Text = "Explode at Closest Enemy", Func = function() local e = getClosestEnemy(); if e and e.Character then local r = e.Character:FindFirstChild("HumanoidRootPart"); if r then triggerExplosion(r.Position); Library:Notify("Exploded at "..e.Name,2) end else Library:Notify("No enemy",2) end end })
 
 EF_SS:AddLabel("Sound IDs from Gun module + AR viewmodel")
-EF_SS:AddToggle("SSEnabled", { Text = "Enable Sound Spam", Default = false, Callback = function(v) Config.SoundSpam.Enabled = v; if v then startSoundSpam() else stopSoundSpam() end end })
+EF_SS:AddToggle("SSEnabled",  { Text = "Enable Sound Spam", Default = false, Callback = function(v) Config.SoundSpam.Enabled = v; if v then startSoundSpam() else stopSoundSpam() end end })
 EF_SS:AddDropdown("SSPreset", { Text = "Preset Sound", Default = "Explosion / Impact", Values = SOUND_ID_KEYS, Callback = function(v) Config.SoundSpam.SoundId = SOUND_ID_VALUES[v] end })
-EF_SS:AddInput("SSCustomId", { Default = "", Numeric = false, Finished = false, Text = "Custom Sound ID", Placeholder = "rbxassetid://... or number", Callback = function(v) if v ~= "" then local n = v:gsub("[^%d]",""); Config.SoundSpam.CustomId = n ~= "" and ("rbxassetid://"..n) or "" else Config.SoundSpam.CustomId = "" end end })
+EF_SS:AddInput("SSCustomId",  { Default = "", Numeric = false, Finished = false, Text = "Custom Sound ID", Placeholder = "rbxassetid://... or number", Callback = function(v) if v ~= "" then local n = v:gsub("[^%d]",""); Config.SoundSpam.CustomId = n ~= "" and ("rbxassetid://"..n) or "" else Config.SoundSpam.CustomId = "" end end })
 EF_SS:AddSlider("SSInterval", { Text = "Interval (ms)", Default = 100, Min = 10, Max = 2000, Rounding = 0, Callback = function(v) Config.SoundSpam.Interval = v/1000 end })
 EF_SS:AddSlider("SSVolume",   { Text = "Volume",        Default = 10,  Min = 1,  Max = 10,   Rounding = 0, Suffix = "x", Callback = function(v) Config.SoundSpam.Volume = v end })
-EF_SS:AddButton({ Text = "Play Once", Func = function() local id = Config.SoundSpam.CustomId ~= "" and Config.SoundSpam.CustomId or Config.SoundSpam.SoundId; playSoundOnce(id, Config.SoundSpam.Volume); Library:Notify("Played: " .. id, 2) end })
+EF_SS:AddButton({ Text = "Play Once", Func = function() local id = Config.SoundSpam.CustomId ~= "" and Config.SoundSpam.CustomId or Config.SoundSpam.SoundId; playSoundOnce(id, Config.SoundSpam.Volume); Library:Notify("Played: "..id, 2) end })
 
 EF_R:AddLabel("TracerEffect: " .. (TracerEffectModule and "✓" or "✗"))
-EF_R:AddToggle("TREnabled",   { Text = "Enable Tracers",         Default = false, Callback = function(v) Config.TracerEffect.Enabled     = v; if v then startTracerHooks() else stopTracers() end end })
-EF_R:AddToggle("TROnShoot",   { Text = "On Shoot",               Default = true,  Callback = function(v) Config.TracerEffect.OnShoot      = v end })
-EF_R:AddToggle("TRToEnemy",   { Text = "Trace to Closest Enemy", Default = false, Callback = function(v) Config.TracerEffect.TraceToEnemy = v end })
+EF_R:AddToggle("TREnabled",  { Text = "Enable Tracers",         Default = false, Callback = function(v) Config.TracerEffect.Enabled     = v; if v then startTracerHooks() else stopTracers() end end })
+EF_R:AddToggle("TROnShoot",  { Text = "On Shoot",               Default = true,  Callback = function(v) Config.TracerEffect.OnShoot      = v end })
+EF_R:AddToggle("TRToEnemy",  { Text = "Trace to Closest Enemy", Default = false, Callback = function(v) Config.TracerEffect.TraceToEnemy = v end })
 EF_R:AddLabel("Color"):AddColorPicker("TRColor", { Default = Color3.fromRGB(255,50,50), Callback = function(v) Config.TracerEffect.Color = v end })
-EF_R:AddSlider("TRWidth",     { Text = "Width",         Default = 5,   Min = 1,  Max = 50,   Rounding = 0, Suffix = "/100", Callback = function(v) Config.TracerEffect.Width    = v/100 end })
-EF_R:AddSlider("TRDuration",  { Text = "Duration (ms)", Default = 300, Min = 50, Max = 2000, Rounding = 0,                  Callback = function(v) Config.TracerEffect.Duration = v/1000 end })
+EF_R:AddSlider("TRWidth",    { Text = "Width",         Default = 5,   Min = 1,  Max = 50,   Rounding = 0, Suffix = "/100", Callback = function(v) Config.TracerEffect.Width    = v/100 end })
+EF_R:AddSlider("TRDuration", { Text = "Duration (ms)", Default = 300, Min = 50, Max = 2000, Rounding = 0,                  Callback = function(v) Config.TracerEffect.Duration = v/1000 end })
 
 EF_A:AddLabel("PlayPreloadedAnimation: " .. (PlayAnimFn and "✓" or "Fallback"))
 EF_A:AddInput("AnimID",   { Default = "", Numeric = true, Finished = false, Text = "Animation ID", Placeholder = "507770239", Callback = function(v) Config.AnimationSpoof.AnimId = v end })
 EF_A:AddToggle("AnimLoop",{ Text = "Looped", Default = false, Callback = function(v) Config.AnimationSpoof.Looped = v end })
-EF_A:AddSlider("AnimSpd", { Text = "Speed", Default = 10, Min = 1, Max = 50, Rounding = 0, Suffix = "/10", Callback = function(v) Config.AnimationSpoof.Speed = v/10 end })
-EF_A:AddButton({ Text = "Play", Func = function() local id = Config.AnimationSpoof.AnimId; if not id or id=="" then Library:Notify("Enter an ID", 2); return end; playAnimation(id, Config.AnimationSpoof.Looped, Config.AnimationSpoof.Speed); Library:Notify("Playing " .. id, 2) end })
-EF_A:AddButton({ Text = "Stop", Func = function() stopAnimation(); Library:Notify("Stopped", 2) end })
+EF_A:AddSlider("AnimSpd", { Text = "Speed",  Default = 10, Min = 1, Max = 50, Rounding = 0, Suffix = "/10", Callback = function(v) Config.AnimationSpoof.Speed = v/10 end })
+EF_A:AddButton({ Text = "Play", Func = function() local id = Config.AnimationSpoof.AnimId; if not id or id=="" then Library:Notify("Enter an ID",2); return end; playAnimation(id, Config.AnimationSpoof.Looped, Config.AnimationSpoof.Speed); Library:Notify("Playing "..id,2) end })
+EF_A:AddButton({ Text = "Stop", Func = function() stopAnimation(); Library:Notify("Stopped",2) end })
 
 EF_MC:AddLabel("MobileController: " .. (MobileController and "✓" or "✗"))
-EF_MC:AddToggle("MCForce",   { Text = "Force Mobile Mode",  Default = false, Callback = function(v) Config.MobileCtrl.ForceEnableMobile    = v; applyMobileSettings() end })
-EF_MC:AddToggle("MCPrompts", { Text = "Hide Duel Prompts",  Default = false, Callback = function(v) Config.MobileCtrl.DisableMobilePrompts = v; applyMobileSettings() end })
-EF_MC:AddButton({ Text = "Apply Now", Func = function() applyMobileSettings(); Library:Notify("Applied", 2) end })
-
--- ─── MISC TAB ───────────────────────────────────────────────────────────
+EF_MC:AddToggle("MCForce",   { Text = "Force Mobile Mode", Default = false, Callback = function(v) Config.MobileCtrl.ForceEnableMobile    = v; applyMobileSettings() end })
+EF_MC:AddToggle("MCPrompts", { Text = "Hide Duel Prompts", Default = false, Callback = function(v) Config.MobileCtrl.DisableMobilePrompts = v; applyMobileSettings() end })
+EF_MC:AddButton({ Text = "Apply Now", Func = function() applyMobileSettings(); Library:Notify("Applied",2) end })
 
 local MS_L  = Tabs.Misc:AddLeftGroupbox("RakNet Ping Spoof")
 local MS_R  = Tabs.Misc:AddRightGroupbox("Auto Collect")
@@ -2047,7 +1859,7 @@ local MS_OB = Tabs.Misc:AddLeftGroupbox("Anti Out Of Bounds")
 
 MS_L:AddLabel("Spoofs packet 0x1B ping value")
 MS_L:AddToggle("RKEnabled", { Text = "Enable", Default = false, Callback = function(v) Config.RakNet.Enabled = v; if v then startRakNet() else stopRakNet() end end })
-MS_L:AddButton({ Text = "Remove Hook", Func = function() stopRakNet(); Config.RakNet.Enabled = false; Library:Notify("Hook removed", 2) end })
+MS_L:AddButton({ Text = "Remove Hook", Func = function() stopRakNet(); Config.RakNet.Enabled=false; Library:Notify("Hook removed",2) end })
 
 MS_R:AddToggle("ACEnabled", { Text = "Enable Auto Collect", Default = false, Callback = function(v) Config.AutoCollect.Enabled = v end })
 MS_R:AddToggle("ACHealth",  { Text = "Health Drops", Default = true,  Tooltip = "Only when not full HP", Callback = function(v) Config.AutoCollect.CollectHealth = v end })
@@ -2058,17 +1870,16 @@ MS_OB:AddToggle("OOBEnabled",     { Text = "Enable Anti OOB",  Default = false, 
 MS_OB:AddToggle("OOBSpoofRemote", { Text = "Spoof Remote",     Default = true,  Callback = function(v) Config.AntiOOB.SpoofRemote  = v end })
 MS_OB:AddToggle("OOBPatchMod",    { Text = "Patch Module",     Default = true,  Callback = function(v) Config.AntiOOB.PatchModule  = v; if v and Config.AntiOOB.Enabled then antiOOB_PatchModule() end end })
 MS_OB:AddToggle("OOBHideParts",   { Text = "Hide OOB Parts",   Default = false, Callback = function(v) Config.AntiOOB.HideOOBParts = v end })
-MS_OB:AddButton({ Text = "Force Apply", Func = function() startAntiOOB(); Library:Notify("Applied", 2) end })
-
--- ─── SETTINGS TAB ───────────────────────────────────────────────────────
+MS_OB:AddButton({ Text = "Force Apply", Func = function() startAntiOOB(); Library:Notify("Applied",2) end })
 
 local ST_L = Tabs.Settings:AddLeftGroupbox("Safety")
 local ST_R = Tabs.Settings:AddRightGroupbox("Stop All")
 
 ST_L:AddToggle("AutoDisable", { Text = "Auto Disable on Death", Default = true, Callback = function(v) Config.Safety.AutoDisableOnDeath = v end })
-ST_L:AddLabel("Emergency key: DELETE"); ST_L:AddLabel("Restores position and disables everything")
+ST_L:AddLabel("Emergency key: DELETE")
+ST_L:AddLabel("Restores position and disables everything")
 
-ST_R:AddButton({ Text = "Disable All Features", Func = function() disableAll(); restorePos(); Library:Notify("All disabled", 2) end })
+ST_R:AddButton({ Text = "Disable All Features", Func = function() disableAll(); restorePos(); Library:Notify("All disabled",2) end })
 ST_R:AddButton({
     Text = "Unload Script", DoubleClick = true, Tooltip = "Double click to confirm",
     Func = function()
@@ -2082,7 +1893,7 @@ ST_R:AddButton({
         for _, p in ipairs(Players:GetPlayers()) do wtUnhookPlayer(p) end
         for _, conns in pairs(omegaMeleeConnections) do for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end end
         if ragebotPersistConn then ragebotPersistConn:Disconnect() end
-        if omegaPersistConn then omegaPersistConn:Disconnect() end
+        if omegaPersistConn   then omegaPersistConn:Disconnect() end
         pcall(function() RunService:UnbindFromRenderStep("VoidRestore") end)
         pcall(function() RunService:UnbindFromRenderStep("PureDesyncRestore") end)
         stopRakNet(); stopWeaponTracker(); stopAntiOOB(); stopAntiProjectile(); stopProjectileMimic()
