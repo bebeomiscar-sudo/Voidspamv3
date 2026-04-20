@@ -19,70 +19,54 @@ local CollectionService = cloneref(game:GetService("CollectionService"))
 local lp       = Players.LocalPlayer
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
--- ═══════════════════════════════════════════════════════════════════════
--- SAFE LIBRARY LOADER
--- the original crash was here — if HttpGet fails or returns garbage
--- loadstring returns nil and calling nil() = "attempt to call a nil value"
--- we retry up to 3 times before giving up
--- ═══════════════════════════════════════════════════════════════════════
-
 local repo = "https://raw.githubusercontent.com/mstudio45/LinoriaLib/main/"
 
 local function safeLoad(url, label)
-    local result = nil
+    local result  = nil
     local lastErr = "unknown"
+    local attempt = 0
 
-    for attempt = 1, 3 do
-        local httpOk, httpResult = pcall(function()
-            return game:HttpGet(url)
-        end)
+    while attempt < 3 and not result do
+        attempt += 1
 
-        if not httpOk then
-            lastErr = "HttpGet failed: " .. tostring(httpResult)
-            warn("[RivalsTool] " .. label .. " attempt " .. attempt .. " — " .. lastErr)
-            task.wait(1.5)
-            continue
+        local httpOk, httpResult = pcall(game.HttpGet, game, url)
+
+        if not httpOk or not httpResult or httpResult == "" then
+            lastErr = not httpOk and ("HttpGet failed: " .. tostring(httpResult)) or "empty response"
+            warn("[RivalsTool] " .. label .. " attempt " .. attempt .. " failed — " .. lastErr)
+            task.wait(2)
+        else
+            local compileOk, compiled = pcall(loadstring, httpResult)
+
+            if not compileOk or type(compiled) ~= "function" then
+                lastErr = "loadstring failed: " .. tostring(compiled)
+                warn("[RivalsTool] " .. label .. " attempt " .. attempt .. " failed — " .. lastErr)
+                task.wait(2)
+            else
+                local runOk, runResult = pcall(compiled)
+
+                if not runOk then
+                    lastErr = "execution failed: " .. tostring(runResult)
+                    warn("[RivalsTool] " .. label .. " attempt " .. attempt .. " failed — " .. lastErr)
+                    task.wait(2)
+                else
+                    result = runResult or true
+                end
+            end
         end
-
-        if not httpResult or httpResult == "" then
-            lastErr = "empty response"
-            warn("[RivalsTool] " .. label .. " attempt " .. attempt .. " — " .. lastErr)
-            task.wait(1.5)
-            continue
-        end
-
-        local compileOk, compiled = pcall(loadstring, httpResult)
-
-        if not compileOk or not compiled then
-            lastErr = "loadstring failed: " .. tostring(compiled)
-            warn("[RivalsTool] " .. label .. " attempt " .. attempt .. " — " .. lastErr)
-            task.wait(1.5)
-            continue
-        end
-
-        local runOk, runResult = pcall(compiled)
-
-        if not runOk then
-            lastErr = "execution failed: " .. tostring(runResult)
-            warn("[RivalsTool] " .. label .. " attempt " .. attempt .. " — " .. lastErr)
-            task.wait(1.5)
-            continue
-        end
-
-        result = runResult
-        break
     end
 
     if not result then
-        error("[RivalsTool] Failed to load " .. label .. " after 3 attempts — last error: " .. lastErr, 2)
+        error("[RivalsTool] Could not load " .. label .. " after 3 attempts. Last error: " .. lastErr)
     end
 
     return result
 end
 
-local Library      = safeLoad(repo .. "Library.lua",              "LinoriaLib")
-local ThemeManager = safeLoad(repo .. "addons/ThemeManager.lua",  "ThemeManager")
-local SaveManager  = safeLoad(repo .. "addons/SaveManager.lua",   "SaveManager")
+local Library      = safeLoad(repo .. "Library.lua",             "LinoriaLib")
+local ThemeManager = safeLoad(repo .. "addons/ThemeManager.lua", "ThemeManager")
+local SaveManager  = safeLoad(repo .. "addons/SaveManager.lua",  "SaveManager")
+            
 
 if Library and Library.GetMouse then
     Library.GetMouse = function()
